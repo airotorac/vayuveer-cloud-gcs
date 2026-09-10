@@ -58,6 +58,9 @@ Raise `camera.width/height/fps/quality` in `config.yaml` if the 4G link allows.
 
 ## 3. Set up the Raspberry Pi 5 on the aircraft
 
+Full guide: [drone/README.md](drone/README.md) · printable [installation guide (PDF)](drone/VayuVeer-RPi-Installation-Guide.pdf) ·
+double-click installer [drone/VayuVeer-RPi-Installer.sh](drone/VayuVeer-RPi-Installer.sh).
+
 Wiring: FC `TELEM2` TX/RX/GND ↔ Pi GPIO15 (RXD) / GPIO14 (TXD) / GND, or plug the FC's USB
 into the Pi and use `/dev/ttyACM0`. Set on the FC: `SERIAL2_PROTOCOL=2` (MAVLink2),
 `SERIAL2_BAUD=921` and, so the Pi can drive GUIDED velocity, `SYSID_MYGCS=255` is fine (agent sends as sysid 255).
