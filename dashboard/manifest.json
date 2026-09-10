@@ -1,7 +1,7 @@
 {
-  "name": "AX4 Cloud Control",
-  "short_name": "AX4 Control",
-  "description": "Ground control station for the AiRotor AX4 over the internet",
+  "name": "VayuVeer GCS",
+  "short_name": "VayuVeer GCS",
+  "description": "VayuVeer ground control station: fly the AiRotor AX4 over the internet",
   "start_url": "/",
   "display": "standalone",
   "orientation": "landscape",

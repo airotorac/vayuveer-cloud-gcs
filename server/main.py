@@ -1,5 +1,5 @@
 """
-AX4 Cloud Control - relay server.
+VayuVeer GCS - relay server.
 
 Sits on the public internet. Drones (RPi 5 agents) connect OUT to it over a
 WebSocket, dashboards connect to it too, and the server relays:
@@ -34,7 +34,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 TOKEN = os.environ.get("AX4_TOKEN", "change-me")
 DASHBOARD_DIR = Path(__file__).resolve().parent.parent / "dashboard"
 
-app = FastAPI(title="AX4 Cloud Control relay")
+app = FastAPI(title="VayuVeer GCS relay")
 
 
 class DroneRoom:
