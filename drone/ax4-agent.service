@@ -6,9 +6,9 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=pi
-WorkingDirectory=/home/pi/ax4-cloud-control/drone
-Environment=AX4_CONFIG=/home/pi/ax4-cloud-control/drone/config.yaml
-ExecStart=/home/pi/ax4-cloud-control/.venv/bin/python agent.py
+WorkingDirectory=/home/pi/vayuveer-cloud-gcs/drone
+Environment=AX4_CONFIG=/home/pi/vayuveer-cloud-gcs/drone/config.yaml
+ExecStart=/home/pi/vayuveer-cloud-gcs/.venv/bin/python agent.py
 Restart=always
 RestartSec=3
 

@@ -29,7 +29,7 @@ port-forwarding or a VPN. One shared token authenticates both sides.
 ## 1. Try it on your laptop (no hardware)
 
 ```bash
-cd ax4-cloud-control
+cd vayuveer-cloud-gcs
 ./run_local.sh                      # relay on :8000 + simulated drone
 ```
 Open <http://127.0.0.1:8000/?token=dev-token>. ARM → CONFIRM ARM → TAKEOFF, then
@@ -58,7 +58,7 @@ into the Pi and use `/dev/ttyACM0`. Set on the FC: `SERIAL2_PROTOCOL=2` (MAVLink
 `SERIAL2_BAUD=921` and, so the Pi can drive GUIDED velocity, `SYSID_MYGCS=255` is fine (agent sends as sysid 255).
 
 ```bash
-git clone <this repo> ~/ax4-cloud-control && cd ~/ax4-cloud-control
+git clone <this repo> ~/vayuveer-cloud-gcs && cd ~/vayuveer-cloud-gcs
 ./drone/install_rpi.sh
 nano drone/config.yaml       # server_url: wss://<DOMAIN>, token, drone_id, drone.mode: mavlink, camera.source: picamera2|opencv
 sudo reboot                  # UART overlay takes effect
