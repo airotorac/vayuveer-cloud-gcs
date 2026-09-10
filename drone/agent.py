@@ -38,7 +38,7 @@ def load_config(path: str | None) -> dict:
     # env overrides for the secrets
     cfg["server_url"] = os.environ.get("VAYUVEER_SERVER_URL", cfg.get("server_url", "ws://127.0.0.1:8000"))
     cfg["token"] = os.environ.get("VAYUVEER_TOKEN", cfg.get("token", "change-me"))
-    cfg["drone_id"] = os.environ.get("VAYUVEER_DRONE_ID", cfg.get("drone_id", "ax4-01"))
+    cfg["drone_id"] = os.environ.get("VAYUVEER_DRONE_ID", cfg.get("drone_id", "vayuveer-01"))
     return cfg
 
 

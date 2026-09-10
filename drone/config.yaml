@@ -2,7 +2,7 @@
 
 server_url: ws://127.0.0.1:8000        # wss://control.example.com in production
 token: change-me                       # must match VAYUVEER_TOKEN on the relay server
-drone_id: ax4-01
+drone_id: vayuveer-01
 telemetry_hz: 5
 
 drone:

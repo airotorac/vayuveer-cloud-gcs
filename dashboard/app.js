@@ -8,8 +8,8 @@
   const cfg = {
     get url() { return localStorage.getItem("vayuveer.url") || ""; },
     get token() { return localStorage.getItem("vayuveer.token") || ""; },
-    get drone() { return localStorage.getItem("vayuveer.drone") || "ax4-01"; },
-    save(u, t, d) { localStorage.setItem("vayuveer.url", u.trim()); localStorage.setItem("vayuveer.token", t.trim()); localStorage.setItem("vayuveer.drone", d.trim() || "ax4-01"); },
+    get drone() { return localStorage.getItem("vayuveer.drone") || "vayuveer-01"; },
+    save(u, t, d) { localStorage.setItem("vayuveer.url", u.trim()); localStorage.setItem("vayuveer.token", t.trim()); localStorage.setItem("vayuveer.drone", d.trim() || "vayuveer-01"); },
   };
   function wsBase() {
     if (cfg.url) return cfg.url.replace(/^http/, "ws").replace(/\/$/, "");
