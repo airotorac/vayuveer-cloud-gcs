@@ -14,7 +14,7 @@ import logging
 import math
 import time
 
-log = logging.getLogger("ax4.camera")
+log = logging.getLogger("vayuveer.camera")
 
 
 class MockCamera:

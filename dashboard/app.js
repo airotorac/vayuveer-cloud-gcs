@@ -6,10 +6,10 @@
 
   // ------------------------------------------------------------------ config
   const cfg = {
-    get url() { return localStorage.getItem("ax4.url") || ""; },
-    get token() { return localStorage.getItem("ax4.token") || ""; },
-    get drone() { return localStorage.getItem("ax4.drone") || "ax4-01"; },
-    save(u, t, d) { localStorage.setItem("ax4.url", u.trim()); localStorage.setItem("ax4.token", t.trim()); localStorage.setItem("ax4.drone", d.trim() || "ax4-01"); },
+    get url() { return localStorage.getItem("vayuveer.url") || ""; },
+    get token() { return localStorage.getItem("vayuveer.token") || ""; },
+    get drone() { return localStorage.getItem("vayuveer.drone") || "ax4-01"; },
+    save(u, t, d) { localStorage.setItem("vayuveer.url", u.trim()); localStorage.setItem("vayuveer.token", t.trim()); localStorage.setItem("vayuveer.drone", d.trim() || "ax4-01"); },
   };
   function wsBase() {
     if (cfg.url) return cfg.url.replace(/^http/, "ws").replace(/\/$/, "");
@@ -201,8 +201,8 @@
   $("btn-upload").onclick = () => { if (!S.waypoints.length) return log("No waypoints to upload", "err"); cmd("mission_upload", { waypoints: S.waypoints, takeoff_alt: +$("takeoff-alt").value, rtl_at_end: $("wp-rtl").checked }); log(`Uploading ${S.waypoints.length} waypoints…`); };
   $("btn-start").onclick = () => { if (confirm("Start AUTO mission now?")) cmd("mission_start"); };
   $("btn-clearwp").onclick = () => { S.waypoints = []; renderWaypoints(); cmd("mission_clear"); };
-  $("btn-savewp").onclick = () => { localStorage.setItem("ax4.mission", JSON.stringify(S.waypoints)); log(`Saved ${S.waypoints.length} waypoints locally`, "ok"); };
-  $("btn-loadwp").onclick = () => { try { S.waypoints = JSON.parse(localStorage.getItem("ax4.mission") || "[]"); renderWaypoints(); log(`Loaded ${S.waypoints.length} waypoints`, "ok"); } catch { } };
+  $("btn-savewp").onclick = () => { localStorage.setItem("vayuveer.mission", JSON.stringify(S.waypoints)); log(`Saved ${S.waypoints.length} waypoints locally`, "ok"); };
+  $("btn-loadwp").onclick = () => { try { S.waypoints = JSON.parse(localStorage.getItem("vayuveer.mission") || "[]"); renderWaypoints(); log(`Loaded ${S.waypoints.length} waypoints`, "ok"); } catch { } };
 
   // ------------------------------------------------------------------ flight buttons
   let armTimer = null;

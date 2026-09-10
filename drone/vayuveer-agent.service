@@ -1,5 +1,5 @@
 [Unit]
-Description=AX4 companion agent (MAVLink <-> cloud relay)
+Description=VayuVeer companion agent (MAVLink <-> cloud relay)
 After=network-online.target
 Wants=network-online.target
 
@@ -7,7 +7,7 @@ Wants=network-online.target
 Type=simple
 User=pi
 WorkingDirectory=/home/pi/vayuveer-cloud-gcs/drone
-Environment=AX4_CONFIG=/home/pi/vayuveer-cloud-gcs/drone/config.yaml
+Environment=VAYUVEER_CONFIG=/home/pi/vayuveer-cloud-gcs/drone/config.yaml
 ExecStart=/home/pi/vayuveer-cloud-gcs/.venv/bin/python agent.py
 Restart=always
 RestartSec=3

@@ -20,7 +20,7 @@ from typing import Callable, Optional
 from pymavlink import mavutil
 from pymavlink.dialects.v20 import ardupilotmega as mavlink
 
-log = logging.getLogger("ax4.mavlink")
+log = logging.getLogger("vayuveer.mavlink")
 
 # Fallback if the FC has not told us its mode map yet.
 COPTER_MODES = {

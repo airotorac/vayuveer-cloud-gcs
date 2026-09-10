@@ -5,6 +5,6 @@ RUN pip install --no-cache-dir -r /app/server/requirements.txt
 COPY server /app/server
 COPY dashboard /app/dashboard
 WORKDIR /app/server
-ENV AX4_TOKEN=change-me
+ENV VAYUVEER_TOKEN=change-me
 EXPOSE 8000
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--ws-max-size", "4194304"]

@@ -11,7 +11,7 @@ Neither side needs a public IP or port-forwarding, which is what makes it work
 over 4G/5G and behind NAT.
 
 Run:  uvicorn main:app --host 0.0.0.0 --port 8000
-Env:  AX4_TOKEN   shared secret both sides must present (?token=...)
+Env:  VAYUVEER_TOKEN   shared secret both sides must present (?token=...)
 """
 from __future__ import annotations
 
@@ -28,10 +28,10 @@ from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-log = logging.getLogger("ax4.server")
+log = logging.getLogger("vayuveer.server")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
-TOKEN = os.environ.get("AX4_TOKEN", "change-me")
+TOKEN = os.environ.get("VAYUVEER_TOKEN", "change-me")
 DASHBOARD_DIR = Path(__file__).resolve().parent.parent / "dashboard"
 
 app = FastAPI(title="VayuVeer Cloud GCS relay")

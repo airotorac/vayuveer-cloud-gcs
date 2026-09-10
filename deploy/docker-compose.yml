@@ -6,7 +6,7 @@ services:
       context: ..
       dockerfile: server/Dockerfile
     environment:
-      - AX4_TOKEN=${AX4_TOKEN}
+      - VAYUVEER_TOKEN=${VAYUVEER_TOKEN}
     restart: unless-stopped
     expose: ["8000"]
 

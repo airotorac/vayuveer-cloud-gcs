@@ -1,7 +1,7 @@
 # AX4 companion agent configuration (Raspberry Pi 5)
 
 server_url: ws://127.0.0.1:8000        # wss://control.example.com in production
-token: change-me                       # must match AX4_TOKEN on the relay server
+token: change-me                       # must match VAYUVEER_TOKEN on the relay server
 drone_id: ax4-01
 telemetry_hz: 5
 

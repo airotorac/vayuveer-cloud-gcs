@@ -12,7 +12,7 @@ if ! grep -q "^enable_uart=1" /boot/firmware/config.txt; then
   echo "dtoverlay=disable-bt" | sudo tee -a /boot/firmware/config.txt
 fi
 sudo usermod -aG dialout,video "$USER"
-sudo cp drone/ax4-agent.service /etc/systemd/system/
+sudo cp drone/vayuveer-agent.service /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable ax4-agent
-echo "Edit drone/config.yaml (server_url, token, drone.mode: mavlink, camera.source), then: sudo systemctl start ax4-agent"
+sudo systemctl enable vayuveer-agent
+echo "Edit drone/config.yaml (server_url, token, drone.mode: mavlink, camera.source), then: sudo systemctl start vayuveer-agent"

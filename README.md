@@ -42,7 +42,7 @@ On a VPS with a DNS name pointing at it:
 
 ```bash
 cd deploy
-cp .env.example .env               # set DOMAIN and a long random AX4_TOKEN
+cp .env.example .env               # set DOMAIN and a long random VAYUVEER_TOKEN
 docker compose up -d --build
 ```
 Caddy obtains a Let's Encrypt certificate automatically. The dashboard is now at
@@ -62,7 +62,7 @@ git clone <this repo> ~/vayuveer-cloud-gcs && cd ~/vayuveer-cloud-gcs
 ./drone/install_rpi.sh
 nano drone/config.yaml       # server_url: wss://<DOMAIN>, token, drone_id, drone.mode: mavlink, camera.source: picamera2|opencv
 sudo reboot                  # UART overlay takes effect
-sudo systemctl start ax4-agent && journalctl -fu ax4-agent
+sudo systemctl start vayuveer-agent && journalctl -fu vayuveer-agent
 ```
 
 Camera options (`camera.source`): `picamera2` for a CSI camera module, `opencv` for a USB
