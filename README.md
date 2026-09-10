@@ -73,6 +73,24 @@ sudo systemctl start vayuveer-agent && journalctl -fu vayuveer-agent
 Camera options (`camera.source`): `picamera2` for a CSI camera module, `opencv` for a USB
 camera / HDMI capture dongle / an `rtsp://` URL from the gimbal, `mock` for a synthetic feed.
 
+## Accounts and roles
+
+Dashboards sign in with a username and password (the drone side keeps using the shared
+`VAYUVEER_TOKEN`). Accounts live in `deploy/users.json` on the relay host and are managed with:
+
+```bash
+python3 server/manage_users.py add <username> <operator|viewer> <drone-id,...|*>   # prints the password
+python3 server/manage_users.py list
+python3 server/manage_users.py remove <username>
+```
+
+* **operator** – full control of the listed aircraft.
+* **viewer** – telemetry and video only; the relay drops any command from a viewer.
+* `drones` limits which aircraft IDs the account may open; `*` means all.
+
+The Compose stack also runs an always-on simulated aircraft, `demo-01`, so demo accounts can fly
+without hardware. Sessions last 12 hours. The master token still works via **Advanced** in the sign-in dialog.
+
 ## Safety features built in
 
 * **Arm confirmation** – ARM must be pressed twice within 4 s; the agent also rejects arm

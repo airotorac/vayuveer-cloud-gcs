@@ -1,0 +1,6 @@
+{
+  "users": [
+    {"username": "demo", "password": "<generate with manage_users.py>", "role": "operator", "drones": ["demo-01"]},
+    {"username": "ops", "password": "<generate with manage_users.py>", "role": "operator", "drones": ["*"]}
+  ]
+}

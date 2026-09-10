@@ -3,147 +3,154 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-<meta name="theme-color" content="#0b0f14">
+<meta name="theme-color" content="#ffffff">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <title>VayuVeer Cloud GCS</title>
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <link rel="stylesheet" href="/style.css">
 </head>
 <body>
 
 <header class="topbar">
-  <div class="brand"><img src="/icons/icon.svg" alt=""><span>VAYUVEER <b>CLOUD GCS</b></span></div>
+  <div class="brand"><img src="/icons/icon.svg" alt=""><span>VayuVeer <b>Cloud GCS</b></span></div>
+  <div class="drone-pick">
+    <select id="drone-select" title="Aircraft"></select>
+  </div>
   <div class="pills">
-    <span class="pill" id="pill-relay" data-state="off">RELAY</span>
-    <span class="pill" id="pill-drone" data-state="off">DRONE</span>
+    <span class="pill" id="pill-relay" data-state="off">Relay</span>
+    <span class="pill" id="pill-drone" data-state="off">Aircraft</span>
     <span class="pill" id="pill-fc" data-state="off">FC</span>
     <span class="pill mode" id="pill-mode">—</span>
-    <span class="pill armed" id="pill-armed" data-state="off">DISARMED</span>
+    <span class="pill armed" id="pill-armed" data-state="off">Disarmed</span>
   </div>
   <div class="stats">
-    <span title="Battery"><i>BAT</i><b id="st-batt">—</b></span>
+    <span title="Battery"><i>Battery</i><b id="st-batt">—</b></span>
     <span title="GPS fix / satellites"><i>GPS</i><b id="st-gps">—</b></span>
-    <span title="Round-trip to drone"><i>RTT</i><b id="st-rtt">—</b></span>
-    <span title="Video frame rate"><i>VID</i><b id="st-fps">—</b></span>
-    <span title="Flight time"><i>T+</i><b id="st-time">00:00</b></span>
+    <span title="Round-trip to aircraft"><i>Latency</i><b id="st-rtt">—</b></span>
+    <span title="Video frame rate"><i>Video</i><b id="st-fps">—</b></span>
+    <span title="Flight time"><i>Flight</i><b id="st-time">00:00</b></span>
   </div>
-  <button class="icon-btn" id="btn-settings" title="Connection settings">⚙</button>
+  <div class="user">
+    <span id="user-name" class="muted"></span>
+    <button class="icon-btn" id="btn-settings" title="Account & connection">⋯</button>
+  </div>
 </header>
 
 <main class="layout">
-  <!-- VIDEO + HUD -->
   <section class="panel video-panel" id="video-panel">
     <img id="video" alt="Live video">
     <canvas id="hud"></canvas>
     <div class="video-overlay-top">
       <span id="vid-source">EO</span>
-      <span id="vid-track" class="hidden">TRACK</span>
-      <span id="vid-offline">NO VIDEO</span>
+      <span id="vid-offline">No video</span>
     </div>
     <div class="video-tools">
       <button data-cam="EO" class="active">EO</button>
       <button data-cam="IR">IR</button>
-      <button id="btn-fullscreen" title="Fullscreen">⛶</button>
+      <button id="btn-fullscreen" title="Fullscreen">⤢</button>
     </div>
     <div class="sticks">
-      <div class="stick" id="stick-left"><label>THR / YAW</label></div>
-      <div class="stick" id="stick-right"><label>PITCH / ROLL</label></div>
+      <div class="stick" id="stick-left"><label>Throttle · Yaw</label></div>
+      <div class="stick" id="stick-right"><label>Pitch · Roll</label></div>
     </div>
   </section>
 
-  <!-- MAP -->
   <section class="panel map-panel">
     <div id="map"></div>
     <div class="map-tools">
-      <button id="btn-center" title="Centre on drone">◎</button>
-      <button id="btn-follow" class="toggle active" title="Follow drone">FOLLOW</button>
-      <button id="btn-plan" class="toggle" title="Tap map to add waypoints">PLAN</button>
-      <button id="btn-layer" title="Satellite / street">SAT</button>
+      <button id="btn-center" title="Centre on aircraft">◎</button>
+      <button id="btn-follow" class="toggle active">Follow</button>
+      <button id="btn-plan" class="toggle">Plan</button>
+      <button id="btn-layer">Satellite</button>
     </div>
-    <div class="map-hint" id="map-hint">Right-click / long-press map: fly here</div>
+    <div class="map-hint" id="map-hint">Right-click or long-press the map to fly there</div>
   </section>
 
-  <!-- FLIGHT CONTROLS -->
   <section class="panel controls">
     <h3>Flight</h3>
     <div class="btn-grid">
-      <button class="big arm" id="btn-arm">ARM</button>
-      <button class="big" id="btn-disarm">DISARM</button>
-      <button class="big go" id="btn-takeoff">TAKEOFF <small id="takeoff-alt-lbl">10 m</small></button>
-      <button class="big" id="btn-land">LAND</button>
-      <button class="big rtl" id="btn-rtl">RTL</button>
-      <button class="big" id="btn-loiter">HOLD</button>
+      <button class="big arm" id="btn-arm">Arm</button>
+      <button class="big" id="btn-disarm">Disarm</button>
+      <button class="big primary" id="btn-takeoff">Take off <small id="takeoff-alt-lbl">10 m</small></button>
+      <button class="big" id="btn-land">Land</button>
+      <button class="big rtl" id="btn-rtl">Return home</button>
+      <button class="big" id="btn-loiter">Hold</button>
     </div>
     <div class="row">
-      <label>Takeoff alt <input type="number" id="takeoff-alt" value="10" min="2" max="120" step="1"> m</label>
+      <label>Take-off altitude <input type="number" id="takeoff-alt" value="10" min="2" max="120" step="1"> m</label>
       <label>Mode
         <select id="mode-select">
           <option>GUIDED</option><option>LOITER</option><option>POSHOLD</option><option>ALT_HOLD</option>
           <option>AUTO</option><option>RTL</option><option>LAND</option><option>SMART_RTL</option><option>BRAKE</option>
         </select>
       </label>
-      <button id="btn-sethome" class="sm">SET HOME</button>
+      <button id="btn-sethome" class="sm">Set home</button>
     </div>
     <div class="row">
-      <label>Goto alt <input type="number" id="goto-alt" value="20" min="2" max="120"> m</label>
-      <label>Joystick speed <input type="range" id="stick-gain" min="0.2" max="1" step="0.1" value="0.6"><span id="stick-gain-lbl">60%</span></label>
+      <label>Go-to altitude <input type="number" id="goto-alt" value="20" min="2" max="120"> m</label>
+      <label>Stick sensitivity <input type="range" id="stick-gain" min="0.2" max="1" step="0.1" value="0.6"><span id="stick-gain-lbl">60%</span></label>
     </div>
-    <button class="big kill" id="btn-kill">HOLD 2s — EMERGENCY STOP</button>
+    <button class="big kill" id="btn-kill">Hold 2 s for emergency stop</button>
   </section>
 
-  <!-- MISSION -->
   <section class="panel mission">
     <h3>Mission <span class="muted" id="mission-status"></span></h3>
-    <ol id="wp-list" class="wp-list"><li class="muted">Enable PLAN and tap the map to add waypoints.</li></ol>
+    <ol id="wp-list" class="wp-list"><li class="muted">Turn on Plan and tap the map to add waypoints.</li></ol>
     <div class="row">
-      <label>WP alt <input type="number" id="wp-alt" value="30" min="2" max="120"> m</label>
-      <label><input type="checkbox" id="wp-rtl" checked> RTL at end</label>
+      <label>Waypoint altitude <input type="number" id="wp-alt" value="30" min="2" max="120"> m</label>
+      <label><input type="checkbox" id="wp-rtl" checked> Return home at end</label>
     </div>
     <div class="row">
-      <button id="btn-upload" class="sm">UPLOAD</button>
-      <button id="btn-start" class="sm go">START</button>
-      <button id="btn-clearwp" class="sm">CLEAR</button>
-      <button id="btn-savewp" class="sm">SAVE</button>
-      <button id="btn-loadwp" class="sm">LOAD</button>
+      <button id="btn-upload" class="sm">Upload</button>
+      <button id="btn-start" class="sm primary">Start</button>
+      <button id="btn-clearwp" class="sm">Clear</button>
+      <button id="btn-savewp" class="sm">Save</button>
+      <button id="btn-loadwp" class="sm">Load</button>
     </div>
   </section>
 
-  <!-- PAYLOAD -->
   <section class="panel payload">
     <h3>Payload</h3>
     <div class="row">
       <label>Gimbal pitch <input type="range" id="gimbal-pitch" min="-90" max="20" value="-20"><span id="gimbal-pitch-lbl">-20°</span></label>
-    </div>
-    <div class="row">
       <label>Gimbal yaw <input type="range" id="gimbal-yaw" min="-180" max="180" value="0"><span id="gimbal-yaw-lbl">0°</span></label>
     </div>
     <div class="row">
       <label>Video fps <input type="range" id="vid-fps" min="1" max="30" value="10"><span id="vid-fps-lbl">10</span></label>
-      <label><input type="checkbox" id="vid-enabled" checked> Stream</label>
+      <label><input type="checkbox" id="vid-enabled" checked> Stream video</label>
     </div>
     <div class="row telemetry-grid" id="tele-grid"></div>
   </section>
 
-  <!-- LOG -->
   <section class="panel log">
-    <h3>Messages <button class="sm" id="btn-clearlog">clear</button></h3>
+    <h3>Messages <button class="sm" id="btn-clearlog">Clear</button></h3>
     <div id="log"></div>
   </section>
 </main>
 
-<!-- SETTINGS -->
 <dialog id="settings">
-  <form method="dialog">
-    <h3>Connection</h3>
-    <label>Relay server URL<input id="cfg-url" placeholder="wss://control.example.com"></label>
-    <label>Access token<input id="cfg-token" type="password" placeholder="shared secret"></label>
-    <label>Drone ID<input id="cfg-drone" placeholder="vayuveer-01"></label>
-    <p class="muted">The Pi agent connects out to the same relay with the same token. Leave URL empty to use this page's host.</p>
-    <div class="row"><button value="cancel" class="sm">Cancel</button><button value="ok" class="sm go" id="cfg-save">Save & connect</button></div>
+  <form method="dialog" id="login-form">
+    <div class="dialog-brand"><img src="/icons/icon.svg" alt=""><div><b>VayuVeer Cloud GCS</b><span class="muted">Sign in to your ground station</span></div></div>
+    <label>Username<input id="cfg-user" autocomplete="username" placeholder="demo"></label>
+    <label>Password<input id="cfg-pass" type="password" autocomplete="current-password"></label>
+    <p class="error" id="login-error"></p>
+    <details>
+      <summary class="muted">Advanced</summary>
+      <label>Relay server URL<input id="cfg-url" placeholder="leave empty to use this site"></label>
+      <label>Master access token<input id="cfg-token" type="password" placeholder="instead of a username"></label>
+      <label>Aircraft ID<input id="cfg-drone" placeholder="vayuveer-01"></label>
+    </details>
+    <div class="row end">
+      <button type="button" class="sm" id="btn-logout">Sign out</button>
+      <button value="cancel" class="sm" type="button" id="btn-cancel">Cancel</button>
+      <button value="ok" class="sm primary" id="cfg-save">Sign in</button>
+    </div>
   </form>
 </dialog>
 

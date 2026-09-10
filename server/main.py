@@ -24,9 +24,11 @@ from collections import deque
 from pathlib import Path
 from typing import Dict, Set
 
-from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+
+import auth
 
 log = logging.getLogger("vayuveer.server")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -101,7 +103,15 @@ async def broadcast_bytes(r: DroneRoom, data: bytes) -> None:
 
 
 def _auth_ok(token: str | None) -> bool:
+    """Drone side: master token only."""
     return token is not None and token == TOKEN
+
+
+def _principal(token: str | None) -> dict | None:
+    """Dashboard side: master token or a user session."""
+    if not token:
+        return None
+    return auth.authenticate(token, TOKEN)
 
 
 # --------------------------------------------------------------------------- #
@@ -164,13 +174,19 @@ async def ws_drone(ws: WebSocket, drone_id: str, token: str | None = Query(defau
 # --------------------------------------------------------------------------- #
 @app.websocket("/ws/client/{drone_id}")
 async def ws_client(ws: WebSocket, drone_id: str, token: str | None = Query(default=None)):
-    if not _auth_ok(token):
+    who = _principal(token)
+    if who is None:
         await ws.close(code=4401)
         return
+    if not auth.drone_allowed(who, drone_id):
+        await ws.close(code=4403)
+        return
+    can_command = who["role"] == "operator"
     await ws.accept()
     r = room(drone_id)
     r.clients.add(ws)
-    log.info("client joined %s (%d clients)", drone_id, len(r.clients))
+    log.info("client %s (%s) joined %s (%d clients)", who["user"], who["role"], drone_id, len(r.clients))
+    await _send_json_safe(ws, {"type": "session", "user": who["user"], "role": who["role"], "drones": who["drones"]})
 
     await _send_json_safe(ws, {"type": "drone_online" if r.drone else "drone_offline", "id": drone_id})
     if r.last_telemetry:
@@ -192,6 +208,9 @@ async def ws_client(ws: WebSocket, drone_id: str, token: str | None = Query(defa
             if t == "ping":
                 # Server-only RTT. Full drone RTT uses type "dping" relayed to the drone.
                 await _send_json_safe(ws, {"type": "pong", "t": payload.get("t"), "server_time": time.time()})
+                continue
+            if t == "cmd" and not can_command:
+                await _send_json_safe(ws, {"type": "error", "text": "view-only account: command ignored"})
                 continue
             if r.drone is None:
                 await _send_json_safe(ws, {"type": "error", "text": "drone offline; command dropped"})
@@ -219,9 +238,32 @@ async def health():
 
 @app.get("/api/drones")
 async def list_drones(token: str | None = Query(default=None)):
-    if not _auth_ok(token):
+    who = _principal(token)
+    if who is None:
         return JSONResponse({"error": "unauthorized"}, status_code=401)
-    return {"drones": [r.status() for r in rooms.values()]}
+    return {"drones": [r.status() for r in rooms.values() if auth.drone_allowed(who, r.drone_id)]}
+
+
+@app.post("/api/login")
+async def api_login(req: Request):
+    try:
+        body = await req.json()
+    except Exception:
+        return JSONResponse({"error": "bad request"}, status_code=400)
+    res = auth.login(str(body.get("username", "")).strip(), str(body.get("password", "")), TOKEN)
+    if res is None:
+        return JSONResponse({"error": "invalid username or password"}, status_code=401)
+    tok, who, exp = res
+    log.info("login %s (%s)", who["user"], who["role"])
+    return {"token": tok, "expires": exp, **who}
+
+
+@app.get("/api/me")
+async def api_me(token: str | None = Query(default=None)):
+    who = _principal(token)
+    if who is None:
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    return who
 
 
 @app.get("/")

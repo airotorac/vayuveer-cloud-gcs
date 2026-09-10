@@ -4,3 +4,4 @@ __pycache__/
 deploy/.env
 drone/config.local.yaml
 .DS_Store
+users.json

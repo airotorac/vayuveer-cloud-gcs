@@ -7,10 +7,16 @@
   // ------------------------------------------------------------------ config
   const cfg = {
     get url() { return localStorage.getItem("vayuveer.url") || ""; },
-    get token() { return localStorage.getItem("vayuveer.token") || ""; },
-    get drone() { return localStorage.getItem("vayuveer.drone") || "vayuveer-01"; },
-    save(u, t, d) { localStorage.setItem("vayuveer.url", u.trim()); localStorage.setItem("vayuveer.token", t.trim()); localStorage.setItem("vayuveer.drone", d.trim() || "vayuveer-01"); },
+    get session() { return localStorage.getItem("vayuveer.session") || ""; },
+    get manualToken() { return localStorage.getItem("vayuveer.token") || ""; },
+    get token() { return this.session || this.manualToken; },
+    get drone() { return localStorage.getItem("vayuveer.drone") || ""; },
+    get user() { try { return JSON.parse(localStorage.getItem("vayuveer.user") || "null"); } catch { return null; } },
+    save(u, t, d) { localStorage.setItem("vayuveer.url", u.trim()); localStorage.setItem("vayuveer.token", t.trim()); localStorage.setItem("vayuveer.drone", d.trim()); },
+    setSession(tok, user) { localStorage.setItem("vayuveer.session", tok); localStorage.setItem("vayuveer.user", JSON.stringify(user)); },
+    clearSession() { localStorage.removeItem("vayuveer.session"); localStorage.removeItem("vayuveer.user"); },
   };
+  function httpBase() { return cfg.url ? cfg.url.replace(/^ws/, "http").replace(/\/$/, "") : ""; }
   function wsBase() {
     if (cfg.url) return cfg.url.replace(/^http/, "ws").replace(/\/$/, "");
     return (location.protocol === "https:" ? "wss://" : "ws://") + location.host;
@@ -20,7 +26,7 @@
   const S = {
     ws: null, connected: false, droneOnline: false, tele: null, lastTeleAt: 0,
     frames: 0, fps: 0, rttDrone: null, rttServer: null,
-    waypoints: [], planMode: false, follow: true, trail: [],
+    waypoints: [], planMode: false, follow: true, trail: [], role: "operator",
     stick: { throttle: 0, yaw: 0, pitch: 0, roll: 0 }, stickActive: false, keys: new Set(),
   };
 
@@ -39,17 +45,18 @@
   let reconnectTimer = null, backoff = 1000;
   function connect() {
     if (S.ws) { try { S.ws.close(); } catch { } S.ws = null; }
-    if (!cfg.token) { openSettings(); return; }
+    if (!cfg.token || !cfg.drone) { openSettings(); return; }
     const url = `${wsBase()}/ws/client/${encodeURIComponent(cfg.drone)}?token=${encodeURIComponent(cfg.token)}`;
-    setPill("pill-relay", "warn", "RELAY…");
+    setPill("pill-relay", "warn", "Relay…");
     const ws = new WebSocket(url);
     ws.binaryType = "arraybuffer";
     S.ws = ws;
-    ws.onopen = () => { S.connected = true; backoff = 1000; setPill("pill-relay", "on", "RELAY"); log(`Connected to relay (${cfg.drone})`, "ok"); };
+    ws.onopen = () => { S.connected = true; backoff = 1000; setPill("pill-relay", "on", "Relay"); log(`Connected to relay (${cfg.drone})`, "ok"); };
     ws.onclose = e => {
       S.connected = false; S.droneOnline = false;
-      setPill("pill-relay", "off", "RELAY"); setPill("pill-drone", "off", "DRONE"); setPill("pill-fc", "off", "FC");
-      if (e.code === 4401) { log("Relay rejected the access token", "err"); openSettings(); return; }
+      setPill("pill-relay", "off", "Relay"); setPill("pill-drone", "off", "Aircraft"); setPill("pill-fc", "off", "FC");
+      if (e.code === 4401) { log("Session expired or invalid – please sign in", "err"); cfg.clearSession(); openSettings("Session expired. Please sign in again."); return; }
+      if (e.code === 4403) { log(`Your account cannot access ${cfg.drone}`, "err"); openSettings(`Your account cannot access aircraft "${cfg.drone}".`); return; }
       log(`Relay link closed (${e.code}) – retrying`, "err");
       clearTimeout(reconnectTimer); reconnectTimer = setTimeout(connect, backoff); backoff = Math.min(backoff * 2, 10000);
     };
@@ -61,13 +68,14 @@
     };
   }
   function send(obj) { if (S.ws && S.ws.readyState === 1) S.ws.send(JSON.stringify(obj)); }
-  function cmd(name, args = {}) { send({ type: "cmd", name, args }); }
+  function cmd(name, args = {}) { if (S.role !== "operator") { log("View-only account – command not sent", "err"); return; } send({ type: "cmd", name, args }); }
 
   function onMessage(m) {
     switch (m.type) {
-      case "telemetry": S.tele = m; S.lastTeleAt = performance.now(); if (!S.droneOnline) { S.droneOnline = true; setPill("pill-drone", "on", "DRONE"); } renderTelemetry(m); break;
-      case "drone_online": S.droneOnline = true; setPill("pill-drone", "on", "DRONE"); log("Drone online", "ok"); break;
-      case "drone_offline": S.droneOnline = false; setPill("pill-drone", "off", "DRONE"); setPill("pill-fc", "off", "FC"); $("vid-offline").classList.remove("hidden"); log("Drone offline", "err"); break;
+      case "telemetry": S.tele = m; S.lastTeleAt = performance.now(); if (!S.droneOnline) { S.droneOnline = true; setPill("pill-drone", "on", "Aircraft"); } renderTelemetry(m); break;
+      case "session": applySession(m); break;
+      case "drone_online": S.droneOnline = true; setPill("pill-drone", "on", "Aircraft"); log("Drone online", "ok"); break;
+      case "drone_offline": S.droneOnline = false; setPill("pill-drone", "off", "Aircraft"); setPill("pill-fc", "off", "FC"); $("vid-offline").classList.remove("hidden"); log("Drone offline", "err"); break;
       case "status": log(m.text, `s${m.severity}`); break;
       case "ack": log(`${m.cmd}: ${m.msg}`, m.ok ? "ok" : "err"); break;
       case "error": log(m.text, "err"); break;
@@ -132,9 +140,9 @@
   // ------------------------------------------------------------------ pills / stats
   function setPill(id, state, text) { const e = $(id); e.dataset.state = state; if (text) e.textContent = text; }
   function renderTelemetry(t) {
-    setPill("pill-fc", t.connected ? "on" : "warn", t.connected ? "FC" : "FC LINK");
+    setPill("pill-fc", t.connected ? "on" : "warn", t.connected ? "FC" : "FC link");
     $("pill-mode").textContent = t.mode;
-    setPill("pill-armed", t.armed ? "on" : "off", t.armed ? "ARMED" : "DISARMED");
+    setPill("pill-armed", t.armed ? "on" : "off", t.armed ? "Armed" : "Disarmed");
     const bp = t.battery_pct; const bb = $("st-batt");
     bb.textContent = bp >= 0 ? `${Math.round(bp)}%  ${t.battery_v.toFixed(1)}V` : `${t.battery_v.toFixed(1)}V`;
     bb.className = bp >= 0 && bp < 20 ? "bad" : bp >= 0 && bp < 35 ? "warn" : "";
@@ -150,19 +158,19 @@
     $("tele-grid").innerHTML = rows.map(([k, v]) => `<div><i>${k}</i><span>${v}</span></div>`).join("");
     updateMap(t);
   }
-  setInterval(() => { if (S.droneOnline && performance.now() - S.lastTeleAt > 4000) { setPill("pill-drone", "warn", "STALE"); } }, 1000);
+  setInterval(() => { if (S.droneOnline && performance.now() - S.lastTeleAt > 4000) { setPill("pill-drone", "warn", "Stale"); } }, 1000);
 
   // ------------------------------------------------------------------ map
   const map = L.map("map", { zoomControl: false, attributionControl: false }).setView([23.0225, 72.5714], 16);
   const street = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 });
   const sat = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { maxZoom: 19 });
   street.addTo(map); let satOn = false;
-  $("btn-layer").onclick = () => { satOn = !satOn; if (satOn) { map.removeLayer(street); sat.addTo(map); } else { map.removeLayer(sat); street.addTo(map); } $("btn-layer").textContent = satOn ? "MAP" : "SAT"; };
-  const droneIcon = L.divIcon({ className: "drone-icon", iconSize: [34, 34], iconAnchor: [17, 17], html: `<div id="drone-rot" style="transform:rotate(0deg)"><svg viewBox="0 0 34 34" width="34" height="34"><path d="M17 3 L24 27 L17 22 L10 27 Z" fill="#35c5ff" stroke="#fff" stroke-width="1.5"/></svg></div>` });
+  $("btn-layer").onclick = () => { satOn = !satOn; if (satOn) { map.removeLayer(street); sat.addTo(map); } else { map.removeLayer(sat); street.addTo(map); } $("btn-layer").textContent = satOn ? "Street" : "Satellite"; };
+  const droneIcon = L.divIcon({ className: "drone-icon", iconSize: [34, 34], iconAnchor: [17, 17], html: `<div id="drone-rot" style="transform:rotate(0deg)"><svg viewBox="0 0 34 34" width="34" height="34"><path d="M17 3 L24 27 L17 22 L10 27 Z" fill="#0a66c2" stroke="#fff" stroke-width="1.5"/></svg></div>` });
   const droneMarker = L.marker([0, 0], { icon: droneIcon, zIndexOffset: 1000 }).addTo(map);
   const homeMarker = L.marker([0, 0], { icon: L.divIcon({ className: "", html: '<div class="home-icon">H</div>', iconSize: [20, 20], iconAnchor: [10, 10] }) });
-  const trail = L.polyline([], { color: "#35c5ff", weight: 2, opacity: .7 }).addTo(map);
-  const wpLine = L.polyline([], { color: "#ffb020", weight: 2, dashArray: "6 6" }).addTo(map);
+  const trail = L.polyline([], { color: "#0a66c2", weight: 2.5, opacity: .8 }).addTo(map);
+  const wpLine = L.polyline([], { color: "#b86e00", weight: 2, dashArray: "6 6" }).addTo(map);
   const wpLayer = L.layerGroup().addTo(map);
   let gotoMarker = null, firstFix = true;
   function updateMap(t) {
@@ -176,7 +184,7 @@
   }
   $("btn-center").onclick = () => { if (S.tele) map.setView([S.tele.lat, S.tele.lon], Math.max(map.getZoom(), 16)); };
   $("btn-follow").onclick = () => { S.follow = !S.follow; $("btn-follow").classList.toggle("active", S.follow); };
-  $("btn-plan").onclick = () => { S.planMode = !S.planMode; $("btn-plan").classList.toggle("active", S.planMode); $("map-hint").textContent = S.planMode ? "PLAN: tap map to add waypoint" : "Right-click / long-press map: fly here"; };
+  $("btn-plan").onclick = () => { S.planMode = !S.planMode; $("btn-plan").classList.toggle("active", S.planMode); $("map-hint").textContent = S.planMode ? "Plan mode: tap the map to add a waypoint" : "Right-click or long-press the map to fly there"; };
   map.on("dragstart", () => { if (S.follow) $("btn-follow").click(); });
   map.on("click", e => { if (!S.planMode) return; S.waypoints.push({ lat: +e.latlng.lat.toFixed(7), lon: +e.latlng.lng.toFixed(7), alt: +$("wp-alt").value }); renderWaypoints(); });
   map.on("contextmenu", e => {
@@ -195,7 +203,7 @@
       .on("dragend", ev => { const p = ev.target.getLatLng(); w.lat = +p.lat.toFixed(7); w.lon = +p.lng.toFixed(7); renderWaypoints(); }).addTo(wpLayer));
     wpLine.setLatLngs(S.waypoints.map(w => [w.lat, w.lon]));
     const ol = $("wp-list");
-    ol.innerHTML = S.waypoints.length ? S.waypoints.map((w, i) => `<li><span>${w.lat.toFixed(5)}, ${w.lon.toFixed(5)}</span><span>${w.alt} m <button data-del="${i}">✕</button></span></li>`).join("") : '<li class="muted">Enable PLAN and tap the map to add waypoints.</li>';
+    ol.innerHTML = S.waypoints.length ? S.waypoints.map((w, i) => `<li><span>${w.lat.toFixed(5)}, ${w.lon.toFixed(5)}</span><span>${w.alt} m <button data-del="${i}">✕</button></span></li>`).join("") : '<li class="muted">Turn on Plan and tap the map to add waypoints.</li>';
     ol.querySelectorAll("[data-del]").forEach(b => b.onclick = () => { S.waypoints.splice(+b.dataset.del, 1); renderWaypoints(); });
   }
   $("btn-upload").onclick = () => { if (!S.waypoints.length) return log("No waypoints to upload", "err"); cmd("mission_upload", { waypoints: S.waypoints, takeoff_alt: +$("takeoff-alt").value, rtl_at_end: $("wp-rtl").checked }); log(`Uploading ${S.waypoints.length} waypoints…`); };
@@ -207,8 +215,8 @@
   // ------------------------------------------------------------------ flight buttons
   let armTimer = null;
   $("btn-arm").onclick = function () {
-    if (!this.classList.contains("confirm")) { this.classList.add("confirm"); this.textContent = "CONFIRM ARM"; armTimer = setTimeout(() => { this.classList.remove("confirm"); this.textContent = "ARM"; }, 4000); return; }
-    clearTimeout(armTimer); this.classList.remove("confirm"); this.textContent = "ARM"; cmd("arm", { confirm: true }); log("ARM requested");
+    if (!this.classList.contains("confirm")) { this.classList.add("confirm"); this.textContent = "Confirm arm"; armTimer = setTimeout(() => { this.classList.remove("confirm"); this.textContent = "Arm"; }, 4000); return; }
+    clearTimeout(armTimer); this.classList.remove("confirm"); this.textContent = "Arm"; cmd("arm", { confirm: true }); log("ARM requested");
   };
   $("btn-disarm").onclick = () => { cmd("disarm"); log("DISARM requested"); };
   $("btn-takeoff").onclick = () => { const alt = +$("takeoff-alt").value; if (confirm(`Take off to ${alt} m AGL?`)) { cmd("takeoff", { alt }); log(`TAKEOFF ${alt} m`); } };
@@ -234,7 +242,7 @@
 
   // ------------------------------------------------------------------ joysticks (nipplejs) + keyboard
   function mkStick(el, onMove) {
-    const m = nipplejs.create({ zone: el, mode: "static", position: { left: "50%", top: "50%" }, color: "#35c5ff", size: 110, restJoystick: true });
+    const m = nipplejs.create({ zone: el, mode: "static", position: { left: "50%", top: "50%" }, color: "#ffffff", size: 110, restJoystick: true });
     m.on("move", (_, d) => { const f = Math.min(d.force, 1); const a = d.angle.radian; onMove(Math.cos(a) * f, Math.sin(a) * f); });
     m.on("end", () => onMove(0, 0));
     return m;
@@ -259,15 +267,58 @@
   } catch { setInterval(() => { if (S.stickActive) sendManual(); }, 100); }
   document.addEventListener("visibilitychange", () => { if (document.hidden && S.stickActive) { S.keys.clear(); Object.assign(S.stick, { pitch: 0, roll: 0, yaw: 0, throttle: 0 }); stickChanged(); log("Page hidden - joystick released", "s4"); } });
 
-  // ------------------------------------------------------------------ settings
-  const dlg = $("settings");
-  function openSettings() { $("cfg-url").value = cfg.url; $("cfg-token").value = cfg.token; $("cfg-drone").value = cfg.drone; if (!dlg.open) dlg.showModal(); }
-  $("btn-settings").onclick = openSettings;
-  dlg.addEventListener("close", () => { if (dlg.returnValue === "ok") { cfg.save($("cfg-url").value, $("cfg-token").value, $("cfg-drone").value); S.trail = []; trail.setLatLngs([]); firstFix = true; connect(); } });
+  // ------------------------------------------------------------------ session / login
+  const dlg = $("settings"), loginErr = $("login-error");
+  function applySession(m) {
+    S.role = m.role || "operator";
+    document.body.classList.toggle("viewer", S.role !== "operator");
+    $("user-name").textContent = m.user === "master" ? "master token" : `${m.user} · ${S.role}`;
+    fillDroneSelect(m.drones || []);
+  }
+  async function fillDroneSelect(allowed) {
+    const sel = $("drone-select"); const cur = cfg.drone;
+    let ids = allowed.filter(d => d !== "*");
+    try { const r = await fetch(`${httpBase()}/api/drones?token=${encodeURIComponent(cfg.token)}`); if (r.ok) (await r.json()).drones.forEach(d => { if (!ids.includes(d.id)) ids.push(d.id); }); } catch { }
+    if (cur && !ids.includes(cur)) ids.unshift(cur);
+    sel.innerHTML = ids.map(id => `<option value="${id}" ${id === cur ? "selected" : ""}>${id}</option>`).join("") + `<option value="__other">Other…</option>`;
+  }
+  $("drone-select").onchange = e => {
+    let id = e.target.value;
+    if (id === "__other") { id = prompt("Aircraft ID:", cfg.drone) || cfg.drone; }
+    if (id && id !== cfg.drone) { localStorage.setItem("vayuveer.drone", id); resetTrack(); connect(); }
+    e.target.value = cfg.drone;
+  };
+  function resetTrack() { S.trail = []; trail.setLatLngs([]); firstFix = true; }
+  function openSettings(msg = "") {
+    $("cfg-url").value = cfg.url; $("cfg-token").value = cfg.manualToken; $("cfg-drone").value = cfg.drone;
+    $("cfg-user").value = (cfg.user && cfg.user.user) || ""; $("cfg-pass").value = ""; loginErr.textContent = msg;
+    $("btn-logout").classList.toggle("hidden", !cfg.session);
+    if (!dlg.open) dlg.showModal();
+  }
+  $("btn-settings").onclick = () => openSettings();
+  $("btn-cancel").onclick = () => dlg.close("cancel");
+  $("btn-logout").onclick = () => { cfg.clearSession(); if (S.ws) S.ws.close(); $("user-name").textContent = ""; openSettings("Signed out."); };
+  $("login-form").addEventListener("submit", async ev => {
+    ev.preventDefault();
+    const user = $("cfg-user").value.trim(), pass = $("cfg-pass").value;
+    cfg.save($("cfg-url").value, $("cfg-token").value, $("cfg-drone").value);
+    if (user) {
+      try {
+        const r = await fetch(`${httpBase()}/api/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: user, password: pass }) });
+        const j = await r.json();
+        if (!r.ok) { loginErr.textContent = j.error || "Sign-in failed"; return; }
+        cfg.setSession(j.token, j);
+        if (!cfg.drone || (j.drones.length && !j.drones.includes("*") && !j.drones.includes(cfg.drone))) localStorage.setItem("vayuveer.drone", j.drones.find(d => d !== "*") || cfg.drone || "");
+      } catch { loginErr.textContent = "Cannot reach the relay server"; return; }
+    } else if (!cfg.manualToken) { loginErr.textContent = "Enter a username and password"; return; }
+    else { cfg.clearSession(); if (!cfg.drone) localStorage.setItem("vayuveer.drone", "vayuveer-01"); }
+    dlg.close("ok"); resetTrack(); connect();
+  });
 
   // ------------------------------------------------------------------ boot
   const qp = new URLSearchParams(location.search);
-  if (qp.get("token")) { cfg.save(qp.get("url") || "", qp.get("token"), qp.get("drone") || cfg.drone); history.replaceState(null, "", location.pathname); }
+  if (qp.get("token")) { cfg.clearSession(); cfg.save(qp.get("url") || "", qp.get("token"), qp.get("drone") || cfg.drone || "vayuveer-01"); history.replaceState(null, "", location.pathname); }
+  else if (qp.get("drone")) { localStorage.setItem("vayuveer.drone", qp.get("drone")); history.replaceState(null, "", location.pathname); }
   if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("/sw.js").catch(() => { });
   renderWaypoints(); connect();
 })();

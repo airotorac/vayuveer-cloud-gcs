@@ -7,8 +7,23 @@ services:
       dockerfile: server/Dockerfile
     environment:
       - VAYUVEER_TOKEN=${VAYUVEER_TOKEN}
+      - VAYUVEER_USERS_FILE=/data/users.json
+    volumes:
+      - ./users.json:/data/users.json
     restart: unless-stopped
     expose: ["8000"]
+
+  # Always-on simulated aircraft so the dashboard can be demonstrated without hardware.
+  demo-drone:
+    build:
+      context: ..
+      dockerfile: drone/Dockerfile
+    environment:
+      - VAYUVEER_TOKEN=${VAYUVEER_TOKEN}
+      - VAYUVEER_SERVER_URL=ws://relay:8000
+      - VAYUVEER_DRONE_ID=demo-01
+    restart: unless-stopped
+    depends_on: [relay]
 
   caddy:
     image: caddy:2
