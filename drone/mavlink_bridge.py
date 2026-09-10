@@ -113,7 +113,13 @@ class MavlinkBridge:
     # ------------------------------------------------------------------ read
     def _read_loop(self) -> None:
         last_hb = time.time()
+        last_sent = 0.0
         while not self._stop.is_set():
+            # 1 Hz GCS heartbeat: lets the FC treat the Pi as its ground station, so
+            # FS_GCS_ENABLE protects against the agent or the Pi itself dying.
+            if time.time() - last_sent >= 1.0:
+                self.master.mav.heartbeat_send(mavlink.MAV_TYPE_GCS, mavlink.MAV_AUTOPILOT_INVALID, 0, 0, 0)
+                last_sent = time.time()
             msg = self.master.recv_match(blocking=True, timeout=1.0)
             if msg is None:
                 if time.time() - last_hb > 5:
