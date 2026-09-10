@@ -275,7 +275,7 @@ async def api_me(token: str | None = Query(default=None)):
     return who
 
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 async def index():
     return FileResponse(DASHBOARD_DIR / "index.html")
 
