@@ -231,6 +231,15 @@ async def ws_client(ws: WebSocket, drone_id: str, token: str | None = Query(defa
 # --------------------------------------------------------------------------- #
 # HTTP
 # --------------------------------------------------------------------------- #
+@app.middleware("http")
+async def no_cache_shell(request: Request, call_next):
+    """The dashboard is tiny; never let browsers serve a stale copy after a redeploy."""
+    resp = await call_next(request)
+    if not request.url.path.startswith("/icons/"):
+        resp.headers["Cache-Control"] = "no-cache, must-revalidate"
+    return resp
+
+
 @app.get("/api/health")
 async def health():
     return {"ok": True, "time": time.time()}
