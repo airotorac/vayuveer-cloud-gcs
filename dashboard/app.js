@@ -112,27 +112,32 @@
     if (hud.width !== w || hud.height !== h) { hud.width = w; hud.height = h; }
     hctx.clearRect(0, 0, w, h);
     const t = S.tele; if (!t) return;
-    const cx = w / 2, cy = h / 2, R = Math.min(w, h) * 0.22;
+    const narrow = w < 640, cx = w / 2, cy = h / 2, R = Math.min(w, h) * (narrow ? 0.18 : 0.22);
     hctx.save(); hctx.strokeStyle = "rgba(57,217,138,.9)"; hctx.fillStyle = "rgba(57,217,138,.9)"; hctx.lineWidth = 1.5; hctx.font = "12px ui-monospace,Menlo,monospace";
     // horizon
     hctx.save(); hctx.translate(cx, cy); hctx.rotate(-t.roll); const pitchPx = (t.pitch * 180 / Math.PI) * (R / 30);
-    hctx.beginPath(); hctx.moveTo(-R * 1.6, pitchPx); hctx.lineTo(-R * 0.35, pitchPx); hctx.moveTo(R * 0.35, pitchPx); hctx.lineTo(R * 1.6, pitchPx); hctx.stroke();
-    for (const d of [-20, -10, 10, 20]) { const y = pitchPx - d * (R / 30); hctx.beginPath(); hctx.moveTo(-R * 0.5, y); hctx.lineTo(R * 0.5, y); hctx.stroke(); hctx.fillText(d, R * 0.55, y + 4); }
+    const hz = narrow ? R * 1.1 : R * 1.6; hctx.beginPath(); hctx.moveTo(-hz, pitchPx); hctx.lineTo(-R * 0.3, pitchPx); hctx.moveTo(R * 0.3, pitchPx); hctx.lineTo(hz, pitchPx); hctx.stroke();
+    for (const d of [-20, -10, 10, 20]) { const y = pitchPx - d * (R / 30); hctx.beginPath(); hctx.moveTo(-R * 0.4, y); hctx.lineTo(R * 0.4, y); hctx.stroke(); hctx.fillText(d, R * 0.45, y + 4); }
     hctx.restore();
     // aircraft reference
     hctx.strokeStyle = "rgba(255,176,32,.95)"; hctx.lineWidth = 2; hctx.beginPath(); hctx.moveTo(cx - R * 0.3, cy); hctx.lineTo(cx - R * 0.1, cy); hctx.lineTo(cx, cy + R * 0.06); hctx.lineTo(cx + R * 0.1, cy); hctx.lineTo(cx + R * 0.3, cy); hctx.stroke();
     // heading tape
     hctx.strokeStyle = hctx.fillStyle = "rgba(223,231,241,.9)"; hctx.lineWidth = 1; hctx.textAlign = "center";
-    const hy = 34, hw = Math.min(w * 0.6, 420), hx0 = cx - hw / 2, pxPerDeg = hw / 90;
+    const hy = 30, hw = Math.max(120, Math.min(w - 250, 360)), hx0 = cx - hw / 2, pxPerDeg = hw / 90;
     hctx.beginPath(); hctx.moveTo(hx0, hy); hctx.lineTo(hx0 + hw, hy); hctx.stroke();
     for (let d = -45; d <= 45; d += 5) { const deg = ((Math.round(t.heading) + d) % 360 + 360) % 360; if (deg % 5) continue; const x = cx + d * pxPerDeg; const big = deg % 15 === 0; hctx.beginPath(); hctx.moveTo(x, hy); hctx.lineTo(x, hy - (big ? 8 : 4)); hctx.stroke(); if (deg % 30 === 0) hctx.fillText({ 0: "N", 90: "E", 180: "S", 270: "W" }[deg] ?? deg, x, hy - 11); }
     hctx.fillStyle = "#ffb020"; hctx.fillText(`${Math.round(t.heading)}°`, cx, hy + 14);
     // side readouts
+    const ry = Math.min(cy, h - 200);   // keep readouts above the joystick zone on short panels
     hctx.textAlign = "left"; hctx.fillStyle = "rgba(223,231,241,.95)"; hctx.font = "bold 16px ui-monospace,Menlo,monospace";
-    hctx.fillText(`${t.groundspeed.toFixed(1)} m/s`, 14, cy - 6); hctx.font = "11px ui-monospace,Menlo,monospace"; hctx.fillText("GS", 14, cy + 10);
-    hctx.textAlign = "right"; hctx.font = "bold 16px ui-monospace,Menlo,monospace"; hctx.fillText(`${t.alt_rel.toFixed(1)} m`, w - 14, cy - 6);
-    hctx.font = "11px ui-monospace,Menlo,monospace"; hctx.fillText(`AGL  ${t.climb >= 0 ? "▲" : "▼"} ${Math.abs(t.climb).toFixed(1)}`, w - 14, cy + 10);
-    hctx.textAlign = "left"; hctx.fillText(`${t.mode}${t.armed ? "  ARMED" : ""}${t.manual_active ? "  STICK" : ""}`, 14, h - 14);
+    hctx.fillText(`${t.groundspeed.toFixed(1)} m/s`, 14, ry - 6); hctx.font = "11px ui-monospace,Menlo,monospace"; hctx.fillText(narrow ? "GS" : "GROUND SPEED", 14, ry + 10);
+    hctx.textAlign = "right"; hctx.font = "bold 16px ui-monospace,Menlo,monospace"; hctx.fillText(`${t.alt_rel.toFixed(1)} m`, w - 14, ry - 6);
+    hctx.font = "11px ui-monospace,Menlo,monospace"; hctx.fillText(narrow ? `ALT ${t.climb >= 0 ? "▲" : "▼"}${Math.abs(t.climb).toFixed(1)}` : `ALT AGL  ${t.climb >= 0 ? "▲" : "▼"} ${Math.abs(t.climb).toFixed(1)} m/s`, w - 14, ry + 10);
+    // status line: top-left, below the source chip, clear of the joysticks
+    hctx.textAlign = "left"; hctx.font = "bold 12px ui-monospace,Menlo,monospace";
+    const status = [t.mode, t.armed ? "ARMED" : "DISARMED", t.manual_active ? "STICK" : ""].filter(Boolean).join("   ");
+    const sw = hctx.measureText(status).width; hctx.fillStyle = "rgba(0,0,0,.45)"; hctx.fillRect(10, 40, sw + 14, 20);
+    hctx.fillStyle = t.armed ? "#ffb020" : "rgba(223,231,241,.95)"; hctx.fillText(status, 17, 54);
     hctx.restore();
   }
   (function hudLoop() { drawHud(); requestAnimationFrame(hudLoop); })();

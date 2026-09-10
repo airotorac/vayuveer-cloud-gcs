@@ -41,11 +41,7 @@ class MockCamera:
         cy = self.h / 2 + 60 * math.cos(t / 4)
         d.rectangle([cx - 18, cy - 12, cx + 18, cy + 12], outline=(255, 90, 60), width=2)
         d.text((cx - 16, cy + 14), "TRK 0.91", fill=(255, 90, 60))
-        d.text((8, 8), f"{self.source_label} MOCK CAM {time.strftime('%H:%M:%S')}", fill=(200, 230, 200))
-        s = self.telemetry
-        if s:
-            d.text((8, self.h - 18), f"ALT {s.get('alt_rel', 0):.1f}m  GS {s.get('groundspeed', 0):.1f}m/s  HDG {s.get('heading', 0):.0f}",
-                   fill=(200, 230, 200))
+        d.text((self.w / 2 - 44, self.h - 16), f"SIMULATED {self.source_label} FEED", fill=(150, 175, 150))
         buf = io.BytesIO()
         img.save(buf, "JPEG", quality=self.q)
         return buf.getvalue()
