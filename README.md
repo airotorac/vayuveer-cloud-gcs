@@ -26,6 +26,11 @@ port-forwarding or a VPN. One shared token authenticates both sides.
 | `dashboard/` | Browser | The app: video + HUD, Leaflet map, telemetry, ARM/TAKEOFF/LAND/RTL, dual virtual joysticks (or WASD/QE/RF keys), waypoint missions, gimbal, EO/IR toggle. Installable as a PWA. |
 | `deploy/` | VPS | `docker compose` with Caddy for automatic HTTPS. |
 
+## Live deployment
+
+The production relay runs at **https://gcs.vayuveer.in** (AWS EC2, Mumbai). Point a Pi at it with
+`server_url: wss://gcs.vayuveer.in` in `drone/config.yaml` and the shared token from `deploy/.env`.
+
 ## 1. Try it on your laptop (no hardware)
 
 ```bash
