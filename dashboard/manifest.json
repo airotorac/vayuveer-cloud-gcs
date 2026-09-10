@@ -1,0 +1,15 @@
+{
+  "name": "AX4 Cloud Control",
+  "short_name": "AX4 Control",
+  "description": "Ground control station for the AiRotor AX4 over the internet",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#0b0f14",
+  "theme_color": "#0b0f14",
+  "icons": [
+    {"src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"},
+    {"src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png"}
+  ]
+}

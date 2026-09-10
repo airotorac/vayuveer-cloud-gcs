@@ -1,0 +1,27 @@
+# Cloud relay + automatic HTTPS. Run on any small VPS (1 vCPU / 1 GB is plenty).
+#   cd deploy && cp .env.example .env && edit .env && docker compose up -d
+services:
+  relay:
+    build:
+      context: ..
+      dockerfile: server/Dockerfile
+    environment:
+      - AX4_TOKEN=${AX4_TOKEN}
+    restart: unless-stopped
+    expose: ["8000"]
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      - DOMAIN=${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [relay]
+
+volumes:
+  caddy_data:
+  caddy_config:

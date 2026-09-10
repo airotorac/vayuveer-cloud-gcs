@@ -1,0 +1,5 @@
+websockets>=12
+pyyaml>=6
+pymavlink>=2.4.40
+pillow>=10
+# On the Pi: sudo apt install python3-picamera2 python3-opencv   (or pip install opencv-python-headless)

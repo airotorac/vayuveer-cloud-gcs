@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+*.pyc
+deploy/.env
+drone/config.local.yaml
+.DS_Store

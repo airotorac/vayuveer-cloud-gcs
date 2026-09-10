@@ -1,0 +1,37 @@
+# AX4 companion agent configuration (Raspberry Pi 5)
+
+server_url: ws://127.0.0.1:8000        # wss://control.example.com in production
+token: change-me                       # must match AX4_TOKEN on the relay server
+drone_id: ax4-01
+telemetry_hz: 5
+
+drone:
+  mode: mock                           # mock | mavlink
+  connection: /dev/serial0             # Pi UART to FC TELEM port. USB: /dev/ttyACM0. SITL: udp:127.0.0.1:14550
+  baud: 921600
+  mock_home_lat: 23.0225               # Ahmedabad, used only in mock mode
+  mock_home_lon: 72.5714
+
+camera:
+  enabled: true
+  source: mock                         # mock | picamera2 | opencv
+  device: /dev/video0                  # for opencv (or an rtsp:// URL from the gimbal)
+  width: 640
+  height: 360
+  fps: 10
+  quality: 65                          # JPEG quality; 640x360 @ q65 @ 10fps ~ 300-400 kbit/s
+
+manual:                                # joystick limits (stick fully deflected)
+  max_speed_mps: 5.0
+  max_climb_mps: 2.0
+  max_yaw_rate_dps: 60
+  max_age_s: 0.6                       # stop if no joystick packet within this window
+
+failsafe:
+  action: rtl                          # rtl | land | none  (on cloud-link loss while airborne)
+  link_loss_s: 10
+
+safety:
+  require_arm_confirm: true
+  default_takeoff_alt: 10
+  max_alt: 120                         # m AGL, DGCA limit for most categories

@@ -1,0 +1,16 @@
+[Unit]
+Description=AX4 companion agent (MAVLink <-> cloud relay)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/ax4-cloud-control/drone
+Environment=AX4_CONFIG=/home/pi/ax4-cloud-control/drone/config.yaml
+ExecStart=/home/pi/ax4-cloud-control/.venv/bin/python agent.py
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
