@@ -6,7 +6,7 @@
 
   // ------------------------------------------------------------------ config
   const cfg = {
-    get url() { return localStorage.getItem("vayuveer.url") || ""; },
+    get url() { const u = (localStorage.getItem("vayuveer.url") || "").trim(); return /^(wss?|https?):\/\/[^\s/]+/.test(u) ? u : ""; },
     get session() { return localStorage.getItem("vayuveer.session") || ""; },
     get manualToken() { return localStorage.getItem("vayuveer.token") || ""; },
     get token() { return this.session || this.manualToken; },
@@ -301,7 +301,9 @@
   $("login-form").addEventListener("submit", async ev => {
     ev.preventDefault();
     const user = $("cfg-user").value.trim(), pass = $("cfg-pass").value;
-    cfg.save($("cfg-url").value, $("cfg-token").value, $("cfg-drone").value);
+    const urlField = $("cfg-url").value.trim();
+    if (urlField && !/^(wss?|https?):\/\/[^\s/]+/.test(urlField)) { $("cfg-url").value = ""; loginErr.textContent = "Relay server URL must start with https:// or wss:// – cleared it. Try again."; return; }
+    cfg.save(urlField, $("cfg-token").value, $("cfg-drone").value);
     if (user) {
       try {
         const r = await fetch(`${httpBase()}/api/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: user, password: pass }) });
@@ -309,7 +311,7 @@
         if (!r.ok) { loginErr.textContent = j.error || "Sign-in failed"; return; }
         cfg.setSession(j.token, j);
         if (!cfg.drone || (j.drones.length && !j.drones.includes("*") && !j.drones.includes(cfg.drone))) localStorage.setItem("vayuveer.drone", j.drones.find(d => d !== "*") || cfg.drone || "");
-      } catch { loginErr.textContent = "Cannot reach the relay server"; return; }
+      } catch { loginErr.textContent = `Cannot reach the relay server${cfg.url ? " at " + cfg.url : ""}`; return; }
     } else if (!cfg.manualToken) { loginErr.textContent = "Enter a username and password"; return; }
     else { cfg.clearSession(); if (!cfg.drone) localStorage.setItem("vayuveer.drone", "vayuveer-01"); }
     dlg.close("ok"); resetTrack(); connect();
