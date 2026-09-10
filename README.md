@@ -23,7 +23,7 @@ port-forwarding or a VPN. One shared token authenticates both sides.
 |---|---|---|
 | `drone/` | Raspberry Pi 5 | Agent: MAVLink bridge, camera streamer, joystick watchdog, link-loss failsafe. Has a **mock** mode that simulates a drone so the whole stack runs on a laptop. |
 | `server/` | Any VPS / Docker | Relay: WebSocket fan-out, token auth, serves the dashboard. |
-| `dashboard/` | Browser | The app: video + HUD, Leaflet map, telemetry, ARM/TAKEOFF/LAND/RTL, dual virtual joysticks (or WASD/QE/RF keys), waypoint missions, gimbal, EO/IR toggle. Installable as a PWA. |
+| `dashboard/` | Browser | The app: video + HUD, Leaflet map, telemetry, ARM/TAKEOFF/LAND/RTL, dual virtual joysticks (or WASD/QE/RF keys), waypoint missions, geofence editor, gimbal, EO/IR toggle. Installable as a PWA. |
 | `deploy/` | VPS | `docker compose` with Caddy for automatic HTTPS. |
 
 ## Live deployment
@@ -106,6 +106,9 @@ without hardware. Sessions last 12 hours. The master token still works via **Adv
   addition to the FC's own radio/GCS failsafes, which you should still configure
   (`FS_GCS_ENABLE` etc.).
 * **Altitude clamp** – `safety.max_alt` caps takeoff/goto altitude (default 120 m AGL).
+* **Geofence** – draw an inclusion polygon on the map (Fence tool), set a max altitude and upload it.
+  On ArduPilot this writes the FENCE_* parameters and the polygon fence with breach action RTL; the
+  dashboard shows a breach banner and warns before a go-to outside the fence.
 * **Emergency stop** – hold the red button 2 s: force-disarm. Only for ground emergencies.
 * **Page hidden → stick released** – switching apps on a phone releases the joystick.
 
@@ -117,7 +120,7 @@ Dashboard → drone: `{"type":"cmd","name":<name>,"args":{...}}` with names
 `arm{confirm,force}` `disarm{force}` `takeoff{alt}` `land` `rtl` `mode{mode}` `goto{lat,lon,alt}`
 `manual{pitch,roll,yaw,throttle ∈ [-1,1]}` `manual_stop` `set_home` `gimbal{pitch,yaw}`
 `camera{source,fps,enabled}` `mission_upload{waypoints:[{lat,lon,alt}],takeoff_alt,rtl_at_end}`
-`mission_start` `mission_clear` `kill{confirm:"KILL"}`.
+`mission_start` `mission_clear` `fence_upload{polygon:[{lat,lon}],max_alt,enable}` `fence_enable{enable}` `fence_clear` `kill{confirm:"KILL"}`.
 
 Drone → dashboard: `telemetry` (5 Hz, see `mavlink_bridge.empty_state()` for fields),
 `status{severity,text}` (FC STATUSTEXT), `ack{cmd,ok,msg}`, `dpong` (latency probe).
@@ -137,4 +140,3 @@ mode names, and `MAV_CMD_NAV_TAKEOFF` needs lat/lon filled. Those are the only p
   lower latency and H.264 hardware encoding on the Pi 5.
 * Per-user accounts / roles instead of a single shared token (FastAPI + JWT).
 * Record telemetry + video server-side for post-flight review (fits the AiServe pipeline).
-* Geofence editor on the map that uploads `FENCE_*` items to the FC.

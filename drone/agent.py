@@ -292,6 +292,15 @@ class Agent:
                 ok, res = await asyncio.to_thread(d.upload_mission, wps,
                                                   float(a.get("takeoff_alt", 10)), bool(a.get("rtl_at_end", True)))
                 self._on_ack("MISSION_UPLOAD", ok, f"{res} ({len(wps)} wps)")
+            elif name == "fence_upload":
+                poly = a.get("polygon", [])
+                ok, res = await asyncio.to_thread(d.upload_fence, poly, float(a.get("max_alt", 120)), bool(a.get("enable", True)))
+                self._on_ack("FENCE_UPLOAD", ok, res)
+            elif name == "fence_enable":
+                d.fence_enable(bool(a.get("enable", True)))
+            elif name == "fence_clear":
+                d.fence_clear()
+                self._on_ack("FENCE_CLEAR", True, "fence removed")
             elif name == "mission_start":
                 self.manual_active = False
                 d.mission_start()

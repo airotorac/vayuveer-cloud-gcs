@@ -28,6 +28,7 @@
     <span class="pill" id="pill-fc" data-state="off">FC</span>
     <span class="pill mode" id="pill-mode">—</span>
     <span class="pill armed" id="pill-armed" data-state="off">Disarmed</span>
+    <span class="pill breach hidden" id="pill-fence" data-state="bad">Fence breach</span>
   </div>
   <div class="stats">
     <span title="Battery"><i>Battery</i><b id="st-batt">—</b></span>
@@ -67,6 +68,7 @@
       <button id="btn-center" title="Centre on aircraft">◎</button>
       <button id="btn-follow" class="toggle active">Follow</button>
       <button id="btn-plan" class="toggle">Plan</button>
+      <button id="btn-fence" class="toggle fence">Fence</button>
       <button id="btn-layer">Satellite</button>
     </div>
     <div class="map-hint" id="map-hint">Right-click or long-press the map to fly there</div>
@@ -112,6 +114,16 @@
       <button id="btn-clearwp" class="sm">Clear</button>
       <button id="btn-savewp" class="sm">Save</button>
       <button id="btn-loadwp" class="sm">Load</button>
+    </div>
+    <h3 class="sub">Geofence <span class="muted" id="fence-status">none</span></h3>
+    <div class="row">
+      <label>Max altitude <input type="number" id="fence-alt" value="120" min="5" max="400"> m</label>
+      <label><input type="checkbox" id="fence-enabled" checked> Enforce (return home on breach)</label>
+    </div>
+    <div class="row">
+      <button id="btn-fence-upload" class="sm primary">Upload fence</button>
+      <button id="btn-fence-clear" class="sm">Clear fence</button>
+      <span class="muted" id="fence-hint">Turn on Fence and tap the map to draw the boundary. Tap a corner to remove it.</span>
     </div>
   </section>
 

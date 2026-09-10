@@ -174,6 +174,8 @@ class MavlinkBridge:
                     s["rssi"] = msg.rssi if msg.rssi != 255 else None
                 elif t == "RADIO_STATUS":
                     s["rssi"] = msg.rssi
+                elif t == "FENCE_STATUS":
+                    s["fence_breach"] = bool(msg.breach_status)
                 elif t == "MISSION_CURRENT":
                     s["mission_current"] = msg.seq
                 elif t == "MISSION_COUNT" and not self._mission_busy:
@@ -330,18 +332,77 @@ class MavlinkBridge:
                             p1=w.get("hold", 0)))
         if rtl_at_end:
             items.append(wp(len(items), mavlink.MAV_CMD_NAV_RETURN_TO_LAUNCH, 0, 0, 0))
+        ok, res = self._upload_items(items, mavlink.MAV_MISSION_TYPE_MISSION)
+        if ok:
+            with self._lock:
+                self.state["mission_count"] = len(items)
+        return ok, res
 
+    # ------------------------------------------------------------------ geofence
+    def upload_fence(self, polygon: list[dict], max_alt: float, enable: bool = True) -> tuple[bool, str]:
+        """Blocking. Inclusion polygon + max altitude, breach action RTL (ArduPilot fence)."""
+        if not self._ready():
+            return False, "not connected"
+        if len(polygon) < 3:
+            return False, "need at least 3 vertices"
+        m = self.master
+        n = len(polygon)
+        items = [mavlink.MAVLink_mission_item_int_message(
+            m.target_system, m.target_component, i, mavlink.MAV_FRAME_GLOBAL,
+            mavlink.MAV_CMD_NAV_FENCE_POLYGON_VERTEX_INCLUSION, 0, 0,
+            n, 0, 0, 0, int(v["lat"] * 1e7), int(v["lon"] * 1e7), 0.0,
+            mavlink.MAV_MISSION_TYPE_FENCE) for i, v in enumerate(polygon)]
+        ok, res = self._upload_items(items, mavlink.MAV_MISSION_TYPE_FENCE)
+        if not ok:
+            return ok, res
+        # FENCE_TYPE bits: 1 = max altitude, 4 = polygon.  FENCE_ACTION 1 = RTL/land.
+        for name, val in (("FENCE_TYPE", 5), ("FENCE_ALT_MAX", float(max_alt)), ("FENCE_ACTION", 1),
+                          ("FENCE_MARGIN", 2), ("FENCE_ENABLE", 1 if enable else 0)):
+            m.mav.param_set_send(m.target_system, m.target_component, name.encode(), float(val),
+                                 mavlink.MAV_PARAM_TYPE_REAL32)
+            time.sleep(0.05)
+        self.fence_enable(enable)
+        with self._lock:
+            self.state["fence"] = {"polygon": [{"lat": v["lat"], "lon": v["lon"]} for v in polygon],
+                                   "max_alt": float(max_alt), "enabled": bool(enable)}
+        return True, f"fence set ({n} vertices, max {max_alt:.0f} m)"
+
+    def fence_enable(self, enable: bool) -> bool:
+        if not self._ready():
+            return False
+        m = self.master
+        m.mav.command_long_send(m.target_system, m.target_component,
+                                mavlink.MAV_CMD_DO_FENCE_ENABLE, 0, 1 if enable else 0, 0, 0, 0, 0, 0, 0)
+        with self._lock:
+            if self.state["fence"]:
+                self.state["fence"]["enabled"] = bool(enable)
+        return True
+
+    def fence_clear(self) -> bool:
+        if not self._ready():
+            return False
+        m = self.master
+        self.fence_enable(False)
+        m.mav.mission_clear_all_send(m.target_system, m.target_component, mavlink.MAV_MISSION_TYPE_FENCE)
+        with self._lock:
+            self.state["fence"] = None
+            self.state["fence_breach"] = False
+        return True
+
+    # ------------------------------------------------------------------ mission protocol
+    def _upload_items(self, items: list, mission_type: int) -> tuple[bool, str]:
+        m = self.master
         self._mission_busy = True
         while not self._mission_q.empty():
             self._mission_q.get_nowait()
         try:
-            m.mav.mission_count_send(m.target_system, m.target_component, len(items), mavlink.MAV_MISSION_TYPE_MISSION)
+            m.mav.mission_count_send(m.target_system, m.target_component, len(items), mission_type)
             deadline = time.time() + 20
             while time.time() < deadline:
                 try:
                     msg = self._mission_q.get(timeout=3)
                 except queue.Empty:
-                    return False, "FC did not request mission items"
+                    return False, "FC did not request items"
                 t = msg.get_type()
                 if t in ("MISSION_REQUEST", "MISSION_REQUEST_INT"):
                     if msg.seq >= len(items):
@@ -350,9 +411,7 @@ class MavlinkBridge:
                 elif t == "MISSION_ACK":
                     ok = msg.type == mavlink.MAV_MISSION_ACCEPTED
                     res = mavlink.enums["MAV_MISSION_RESULT"].get(msg.type)
-                    with self._lock:
-                        self.state["mission_count"] = len(items) if ok else self.state["mission_count"]
                     return ok, res.name if res else str(msg.type)
-            return False, "mission upload timed out"
+            return False, "upload timed out"
         finally:
             self._mission_busy = False

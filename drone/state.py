@@ -13,4 +13,6 @@ def empty_state() -> dict:
         "home": None, "rssi": None, "ekf_ok": None,
         "mission_current": 0, "mission_count": 0,
         "flight_time": 0.0,
+        "fence": None,            # {"polygon": [{"lat","lon"}], "max_alt": m, "enabled": bool}
+        "fence_breach": False,
     }

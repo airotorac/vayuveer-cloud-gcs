@@ -27,6 +27,7 @@
     ws: null, connected: false, droneOnline: false, tele: null, lastTeleAt: 0,
     frames: 0, fps: 0, rttDrone: null, rttServer: null,
     waypoints: [], planMode: false, follow: true, trail: [], role: "operator",
+    fence: [], fenceMode: false, fenceOnFc: null, fenceBreach: false,
     stick: { throttle: 0, yaw: 0, pitch: 0, roll: 0 }, stickActive: false, keys: new Set(),
   };
 
@@ -156,6 +157,12 @@
     $("vid-source").textContent = t.video?.source || "EO";
     $("btn-arm").disabled = t.armed; $("btn-disarm").disabled = !t.armed;
     $("mission-status").textContent = t.mission_count ? `on FC: ${t.mission_count} items, at #${t.mission_current}` : "";
+    if (t.fence && !S.fenceOnFc && !S.fence.length) { S.fence = t.fence.polygon.map(v => ({ lat: v.lat, lon: v.lon })); $("fence-alt").value = t.fence.max_alt; $("fence-enabled").checked = !!t.fence.enabled; renderFence(); }
+    S.fenceOnFc = t.fence || null;
+    if (!!t.fence_breach !== S.fenceBreach) { S.fenceBreach = !!t.fence_breach; log(S.fenceBreach ? "GEOFENCE BREACH – aircraft outside the fence" : "Aircraft back inside the fence", S.fenceBreach ? "err" : "ok"); }
+    $("pill-fence").classList.toggle("hidden", !S.fenceBreach);
+    fencePoly.setStyle({ fillOpacity: S.fenceBreach ? .2 : .06, weight: S.fenceBreach ? 3 : 2 });
+    renderFenceStatus();
     const rows = [["LAT", t.lat.toFixed(6)], ["LON", t.lon.toFixed(6)], ["ALT MSL", `${t.alt_msl.toFixed(1)} m`], ["ALT AGL", `${t.alt_rel.toFixed(1)} m`],
     ["HDG", `${t.heading.toFixed(0)}°`], ["GS", `${t.groundspeed.toFixed(1)} m/s`], ["CLIMB", `${t.climb.toFixed(1)} m/s`], ["THR", `${t.throttle}%`],
     ["ROLL", `${(t.roll * 57.3).toFixed(0)}°`], ["PITCH", `${(t.pitch * 57.3).toFixed(0)}°`], ["HDOP", t.hdop.toFixed(1)], ["EKF", t.ekf_ok == null ? "?" : t.ekf_ok ? "OK" : "BAD"],
@@ -170,6 +177,9 @@
   const street = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 });
   const sat = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { maxZoom: 19 });
   street.addTo(map); let satOn = false;
+  // keep Leaflet's notion of the panel size current (grid reflows, fullscreen, orientation change)
+  try { new ResizeObserver(() => map.invalidateSize({ animate: false })).observe(document.querySelector(".map-panel")); } catch { window.addEventListener("resize", () => map.invalidateSize()); }
+  setTimeout(() => map.invalidateSize(), 400);
   $("btn-layer").onclick = () => { satOn = !satOn; if (satOn) { map.removeLayer(street); sat.addTo(map); } else { map.removeLayer(sat); street.addTo(map); } $("btn-layer").textContent = satOn ? "Street" : "Satellite"; };
   const droneIcon = L.divIcon({ className: "drone-icon", iconSize: [34, 34], iconAnchor: [17, 17], html: `<div id="drone-rot" style="transform:rotate(0deg)"><svg viewBox="0 0 34 34" width="34" height="34"><path d="M17 3 L24 27 L17 22 L10 27 Z" fill="#0a66c2" stroke="#fff" stroke-width="1.5"/></svg></div>` });
   const droneMarker = L.marker([0, 0], { icon: droneIcon, zIndexOffset: 1000 }).addTo(map);
@@ -177,6 +187,16 @@
   const trail = L.polyline([], { color: "#0a66c2", weight: 2.5, opacity: .8 }).addTo(map);
   const wpLine = L.polyline([], { color: "#b86e00", weight: 2, dashArray: "6 6" }).addTo(map);
   const wpLayer = L.layerGroup().addTo(map);
+  const fencePoly = L.polygon([], { color: "#d13438", weight: 2, fillColor: "#d13438", fillOpacity: .06, dashArray: "8 6" }).addTo(map);
+  const fenceLayer = L.layerGroup().addTo(map);
+  function inPolygon(lat, lon, poly) {
+    let inside = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const a = poly[i], b = poly[j];
+      if ((a.lon > lon) !== (b.lon > lon) && lat < (b.lat - a.lat) * (lon - a.lon) / (b.lon - a.lon) + a.lat) inside = !inside;
+    }
+    return inside;
+  }
   let gotoMarker = null, firstFix = true;
   function updateMap(t) {
     if (!t.lat && !t.lon) return;
@@ -189,17 +209,47 @@
   }
   $("btn-center").onclick = () => { if (S.tele) map.setView([S.tele.lat, S.tele.lon], Math.max(map.getZoom(), 16)); };
   $("btn-follow").onclick = () => { S.follow = !S.follow; $("btn-follow").classList.toggle("active", S.follow); };
-  $("btn-plan").onclick = () => { S.planMode = !S.planMode; $("btn-plan").classList.toggle("active", S.planMode); $("map-hint").textContent = S.planMode ? "Plan mode: tap the map to add a waypoint" : "Right-click or long-press the map to fly there"; };
+  function setHint() { $("map-hint").textContent = S.fenceMode ? "Fence mode: tap the map to add a boundary corner, tap a corner to remove it" : S.planMode ? "Plan mode: tap the map to add a waypoint" : "Right-click or long-press the map to fly there"; }
+  $("btn-plan").onclick = () => { S.planMode = !S.planMode; if (S.planMode) { S.fenceMode = false; $("btn-fence").classList.remove("active"); } $("btn-plan").classList.toggle("active", S.planMode); setHint(); };
+  $("btn-fence").onclick = () => { S.fenceMode = !S.fenceMode; if (S.fenceMode) { S.planMode = false; $("btn-plan").classList.remove("active"); } $("btn-fence").classList.toggle("active", S.fenceMode); setHint(); };
   map.on("dragstart", () => { if (S.follow) $("btn-follow").click(); });
-  map.on("click", e => { if (!S.planMode) return; S.waypoints.push({ lat: +e.latlng.lat.toFixed(7), lon: +e.latlng.lng.toFixed(7), alt: +$("wp-alt").value }); renderWaypoints(); });
+  map.on("click", e => {
+    if (S.fenceMode) { S.fence.push({ lat: +e.latlng.lat.toFixed(7), lon: +e.latlng.lng.toFixed(7) }); renderFence(); return; }
+    if (!S.planMode) return; S.waypoints.push({ lat: +e.latlng.lat.toFixed(7), lon: +e.latlng.lng.toFixed(7), alt: +$("wp-alt").value }); renderWaypoints(); });
   map.on("contextmenu", e => {
     const alt = +$("goto-alt").value;
-    if (!confirm(`Fly to ${e.latlng.lat.toFixed(5)}, ${e.latlng.lng.toFixed(5)} at ${alt} m AGL?`)) return;
+    const fenceWarn = S.fence.length >= 3 && !inPolygon(e.latlng.lat, e.latlng.lng, S.fence) ? "\n\nWARNING: this point is OUTSIDE the geofence." : "";
+    if (!confirm(`Fly to ${e.latlng.lat.toFixed(5)}, ${e.latlng.lng.toFixed(5)} at ${alt} m AGL?${fenceWarn}`)) return;
     cmd("goto", { lat: e.latlng.lat, lon: e.latlng.lng, alt });
     if (gotoMarker) map.removeLayer(gotoMarker);
     gotoMarker = L.circleMarker(e.latlng, { radius: 7, color: "#39d98a", fillOpacity: .6 }).addTo(map);
     log(`GOTO ${e.latlng.lat.toFixed(5)}, ${e.latlng.lng.toFixed(5)} @ ${alt} m`);
   });
+
+  // ------------------------------------------------------------------ geofence editor
+  function renderFence() {
+    fenceLayer.clearLayers();
+    S.fence.forEach((v, i) => L.marker([v.lat, v.lon], { icon: L.divIcon({ className: "", html: `<div class="fence-vertex${i === 0 ? " first" : ""}" title="Corner ${i + 1}"></div>`, iconSize: [14, 14], iconAnchor: [7, 7] }), draggable: true })
+      .on("dragend", ev => { const p = ev.target.getLatLng(); v.lat = +p.lat.toFixed(7); v.lon = +p.lng.toFixed(7); renderFence(); })
+      .on("click", ev => { L.DomEvent.stopPropagation(ev); if (S.fenceMode) { S.fence.splice(i, 1); renderFence(); } })
+      .addTo(fenceLayer));
+    fencePoly.setLatLngs(S.fence.map(v => [v.lat, v.lon]));
+    renderFenceStatus();
+  }
+  function renderFenceStatus() {
+    const n = S.fence.length, fc = S.fenceOnFc;
+    let txt = n ? `${n} corner${n === 1 ? "" : "s"} drawn` : "none drawn";
+    if (fc) txt += ` · on aircraft: ${fc.polygon.length} corners, max ${fc.max_alt} m, ${fc.enabled ? "enforced" : "disabled"}`;
+    $("fence-status").textContent = txt;
+    $("btn-fence-upload").disabled = n < 3;
+  }
+  $("btn-fence-upload").onclick = () => {
+    if (S.fence.length < 3) return log("Draw at least 3 fence corners first", "err");
+    if (S.tele && S.tele.lat && !inPolygon(S.tele.lat, S.tele.lon, S.fence) && !confirm("The aircraft is currently OUTSIDE this fence. Upload anyway?")) return;
+    cmd("fence_upload", { polygon: S.fence, max_alt: +$("fence-alt").value, enable: $("fence-enabled").checked }); log(`Uploading geofence (${S.fence.length} corners, max ${$("fence-alt").value} m)…`);
+  };
+  $("btn-fence-clear").onclick = () => { if (S.fenceOnFc && !confirm("Remove the geofence from the aircraft?")) return; S.fence = []; renderFence(); cmd("fence_clear"); };
+  $("fence-enabled").onchange = e => { if (S.fenceOnFc) { cmd("fence_enable", { enable: e.target.checked }); log(`Geofence ${e.target.checked ? "enforced" : "disabled"}`); } };
 
   // ------------------------------------------------------------------ mission
   function renderWaypoints() {
@@ -214,8 +264,8 @@
   $("btn-upload").onclick = () => { if (!S.waypoints.length) return log("No waypoints to upload", "err"); cmd("mission_upload", { waypoints: S.waypoints, takeoff_alt: +$("takeoff-alt").value, rtl_at_end: $("wp-rtl").checked }); log(`Uploading ${S.waypoints.length} waypoints…`); };
   $("btn-start").onclick = () => { if (confirm("Start AUTO mission now?")) cmd("mission_start"); };
   $("btn-clearwp").onclick = () => { S.waypoints = []; renderWaypoints(); cmd("mission_clear"); };
-  $("btn-savewp").onclick = () => { localStorage.setItem("vayuveer.mission", JSON.stringify(S.waypoints)); log(`Saved ${S.waypoints.length} waypoints locally`, "ok"); };
-  $("btn-loadwp").onclick = () => { try { S.waypoints = JSON.parse(localStorage.getItem("vayuveer.mission") || "[]"); renderWaypoints(); log(`Loaded ${S.waypoints.length} waypoints`, "ok"); } catch { } };
+  $("btn-savewp").onclick = () => { localStorage.setItem("vayuveer.mission", JSON.stringify({ waypoints: S.waypoints, fence: S.fence, fenceAlt: +$("fence-alt").value })); log(`Saved ${S.waypoints.length} waypoints and ${S.fence.length} fence corners locally`, "ok"); };
+  $("btn-loadwp").onclick = () => { try { const j = JSON.parse(localStorage.getItem("vayuveer.mission") || "{}"); S.waypoints = j.waypoints || (Array.isArray(j) ? j : []); S.fence = j.fence || []; if (j.fenceAlt) $("fence-alt").value = j.fenceAlt; renderWaypoints(); renderFence(); log(`Loaded ${S.waypoints.length} waypoints, ${S.fence.length} fence corners`, "ok"); } catch { } };
 
   // ------------------------------------------------------------------ flight buttons
   let armTimer = null;
@@ -293,7 +343,7 @@
     if (id && id !== cfg.drone) { localStorage.setItem("vayuveer.drone", id); resetTrack(); connect(); }
     e.target.value = cfg.drone;
   };
-  function resetTrack() { S.trail = []; trail.setLatLngs([]); firstFix = true; }
+  function resetTrack() { S.trail = []; trail.setLatLngs([]); firstFix = true; S.fence = []; S.fenceOnFc = null; renderFence(); }
   function openSettings(msg = "") {
     $("cfg-url").value = cfg.url; $("cfg-token").value = cfg.manualToken; $("cfg-drone").value = cfg.drone;
     $("cfg-user").value = (cfg.user && cfg.user.user) || ""; $("cfg-pass").value = ""; loginErr.textContent = msg;
@@ -327,5 +377,5 @@
   if (qp.get("token")) { cfg.clearSession(); cfg.save(qp.get("url") || "", qp.get("token"), qp.get("drone") || cfg.drone || "vayuveer-01"); history.replaceState(null, "", location.pathname); }
   else if (qp.get("drone")) { localStorage.setItem("vayuveer.drone", qp.get("drone")); history.replaceState(null, "", location.pathname); }
   if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("/sw.js").catch(() => { });
-  renderWaypoints(); connect();
+  renderWaypoints(); renderFence(); connect();
 })();

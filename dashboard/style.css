@@ -137,3 +137,13 @@ dialog summary{cursor:pointer;margin-bottom:8px}
   .map-panel{height:50vh}
   .stick{width:120px;height:120px}
 }
+
+/* geofence */
+.pill.breach{color:#fff;background:var(--bad);border-color:var(--bad);animation:blink .6s infinite alternate}
+button.toggle.fence.active{background:var(--bad-soft);border-color:var(--bad);color:var(--bad)}
+h3.sub{margin-top:16px;padding-top:12px;border-top:1px solid var(--line)}
+.fence-vertex{background:#fff;border:2px solid var(--bad);border-radius:50%;width:14px;height:14px;box-shadow:0 1px 3px rgba(0,0,0,.3);cursor:pointer}
+.fence-vertex.first{background:var(--bad)}
+h3{flex-wrap:wrap;gap:4px 10px}
+h3 .muted{text-transform:none;letter-spacing:0;font-weight:400;font-family:var(--mono);font-size:11px}
+#fence-hint{flex-basis:100%}

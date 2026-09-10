@@ -23,6 +23,18 @@ def offset_latlon(lat: float, lon: float, north_m: float, east_m: float) -> tupl
     return lat + math.degrees(dlat), lon + math.degrees(dlon)
 
 
+def point_in_polygon(lat: float, lon: float, poly: list[dict]) -> bool:
+    inside = False
+    n = len(poly)
+    for i in range(n):
+        a, b = poly[i], poly[(i + 1) % n]
+        if (a["lon"] > lon) != (b["lon"] > lon):
+            x = (b["lat"] - a["lat"]) * (lon - a["lon"]) / (b["lon"] - a["lon"]) + a["lat"]
+            if lat < x:
+                inside = not inside
+    return inside
+
+
 def dist_bearing(lat1, lon1, lat2, lon2) -> tuple[float, float]:
     p1, p2 = math.radians(lat1), math.radians(lat2)
     dl = math.radians(lon2 - lon1)
@@ -149,6 +161,19 @@ class MockDrone:
             self._say(6, "Landed, disarming")
             return
 
+        # geofence: breach -> RTL (mirrors ArduPilot FENCE_ACTION=1)
+        f = s.get("fence")
+        if f and f.get("enabled") and s["alt_rel"] > 1.0:
+            outside = (f.get("polygon") and not point_in_polygon(s["lat"], s["lon"], f["polygon"])) or s["alt_rel"] > f.get("max_alt", 1e9)
+            if outside and not s["fence_breach"]:
+                s["fence_breach"] = True
+                self._say(2, "Fence breach - RTL")
+                s["mode"] = "RTL"
+                self._target = None
+                self._vel = [0, 0, 0, 0]
+            elif not outside and s["fence_breach"]:
+                s["fence_breach"] = False
+                self._say(6, "Back inside fence")
         s["alt_rel"] = max(0.0, s["alt_rel"] - vd * dt)
         s["alt_msl"] = self.home_alt + s["alt_rel"]
         s["lat"], s["lon"] = offset_latlon(s["lat"], s["lon"], vn * dt, ve * dt)
@@ -267,6 +292,29 @@ class MockDrone:
         with self._lock:
             self._mission = []
             self.state["mission_count"] = 0
+        return True
+
+    def upload_fence(self, polygon: list[dict], max_alt: float, enable: bool = True) -> tuple[bool, str]:
+        if len(polygon) < 3:
+            return False, "need at least 3 vertices"
+        time.sleep(0.3)
+        with self._lock:
+            self.state["fence"] = {"polygon": [{"lat": v["lat"], "lon": v["lon"]} for v in polygon],
+                                   "max_alt": float(max_alt), "enabled": bool(enable)}
+            self.state["fence_breach"] = False
+        return True, f"fence set ({len(polygon)} vertices, max {max_alt:.0f} m)"
+
+    def fence_enable(self, enable: bool) -> bool:
+        with self._lock:
+            if self.state["fence"]:
+                self.state["fence"]["enabled"] = bool(enable)
+        self._ack("DO_FENCE_ENABLE", True, "enabled" if enable else "disabled")
+        return True
+
+    def fence_clear(self) -> bool:
+        with self._lock:
+            self.state["fence"] = None
+            self.state["fence_breach"] = False
         return True
 
     def upload_mission(self, waypoints: list[dict], takeoff_alt: float = 10.0, rtl_at_end: bool = True) -> tuple[bool, str]:
