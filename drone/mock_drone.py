@@ -12,7 +12,7 @@ import threading
 import time
 from typing import Callable, Optional
 
-from mavlink_bridge import empty_state
+from state import empty_state
 
 EARTH_R = 6371000.0
 
