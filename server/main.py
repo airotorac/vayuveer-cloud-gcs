@@ -29,12 +29,15 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 import auth
+import recorder as rec
 
 log = logging.getLogger("vayuveer.server")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
 TOKEN = os.environ.get("VAYUVEER_TOKEN", "change-me")
 DASHBOARD_DIR = Path(__file__).resolve().parent.parent / "dashboard"
+LOG_DIR = Path(os.environ.get("VAYUVEER_LOG_DIR", Path(__file__).resolve().parent.parent / "data" / "flights"))
+MAX_LOG_GB = float(os.environ.get("VAYUVEER_MAX_LOG_GB", "5"))
 
 app = FastAPI(title="VayuVeer Cloud GCS relay")
 
@@ -48,6 +51,7 @@ class DroneRoom:
         self.clients: Set[WebSocket] = set()
         self.last_telemetry: dict | None = None
         self.recent_events: deque[str] = deque(maxlen=50)   # status/ack replayed to new dashboards
+        self.rec = rec.FlightRecorder(drone_id, LOG_DIR, MAX_LOG_GB)
         self.last_seen = 0.0
         self.frames = 0
         self.bytes_video = 0
@@ -102,6 +106,10 @@ async def broadcast_bytes(r: DroneRoom, data: bytes) -> None:
         r.clients.discard(c)
 
 
+async def broadcast_recording(r: DroneRoom) -> None:
+    await broadcast_text(r, json.dumps({"type": "recording", **r.rec.status()}))
+
+
 def _auth_ok(token: str | None) -> bool:
     """Drone side: master token only."""
     return token is not None and token == TOKEN
@@ -146,17 +154,30 @@ async def ws_drone(ws: WebSocket, drone_id: str, token: str | None = Query(defau
                 data = msg["bytes"]
                 r.frames += 1
                 r.bytes_video += len(data)
+                r.rec.on_frame(data)
                 await broadcast_bytes(r, data)
             elif msg.get("text") is not None:
                 text = msg["text"]
                 # Cache last telemetry so a freshly opened dashboard gets state immediately.
-                if text.startswith('{"type": "telemetry"') or text.startswith('{"type":"telemetry"'):
-                    try:
-                        r.last_telemetry = json.loads(text)
-                    except Exception:
-                        pass
-                elif text.startswith('{"type": "status"') or text.startswith('{"type": "ack"'):
+                try:
+                    msg_obj = json.loads(text) if text.startswith("{") else None
+                except Exception:
+                    msg_obj = None
+                mtype = msg_obj.get("type") if isinstance(msg_obj, dict) else None
+                if mtype == "telemetry":
+                    tele = msg_obj
+                    r.last_telemetry = tele
+                    # auto-record every armed period as a flight
+                    if tele.get("armed") and not r.rec.active:
+                        r.rec.start("armed")
+                        await broadcast_recording(r)
+                    elif not tele.get("armed") and r.rec.active and not r.rec.manual:
+                        r.rec.stop()
+                        await broadcast_recording(r)
+                    r.rec.on_telemetry(tele, text)
+                elif mtype in ("status", "ack"):
                     r.recent_events.append(text)
+                    r.rec.on_event(text)
                 await broadcast_text(r, text)
     except WebSocketDisconnect:
         pass
@@ -166,6 +187,10 @@ async def ws_drone(ws: WebSocket, drone_id: str, token: str | None = Query(defau
         if r.drone is ws:
             r.drone = None
             log.info("drone %s disconnected", drone_id)
+            if r.rec.active:
+                r.rec.on_event(json.dumps({"type": "status", "severity": 3, "text": "aircraft link to relay lost", "t": time.time()}))
+                r.rec.stop()
+                await broadcast_recording(r)
             await broadcast_text(r, json.dumps({"type": "drone_offline", "id": drone_id}))
 
 
@@ -187,6 +212,7 @@ async def ws_client(ws: WebSocket, drone_id: str, token: str | None = Query(defa
     r.clients.add(ws)
     log.info("client %s (%s) joined %s (%d clients)", who["user"], who["role"], drone_id, len(r.clients))
     await _send_json_safe(ws, {"type": "session", "user": who["user"], "role": who["role"], "drones": who["drones"]})
+    await _send_json_safe(ws, {"type": "recording", **r.rec.status()})
 
     await _send_json_safe(ws, {"type": "drone_online" if r.drone else "drone_offline", "id": drone_id})
     if r.last_telemetry:
@@ -215,6 +241,8 @@ async def ws_client(ws: WebSocket, drone_id: str, token: str | None = Query(defa
             if r.drone is None:
                 await _send_json_safe(ws, {"type": "error", "text": "drone offline; command dropped"})
                 continue
+            if t == "cmd":
+                r.rec.on_command(who["user"], payload)
             try:
                 await r.drone.send_text(text)
             except Exception:
@@ -265,6 +293,104 @@ async def api_login(req: Request):
     tok, who, exp = res
     log.info("login %s (%s)", who["user"], who["role"])
     return {"token": tok, "expires": exp, **who}
+
+
+# ---- flight logs ----------------------------------------------------------- #
+def _flight_access(token: str | None, drone_id: str) -> dict | JSONResponse:
+    who = _principal(token)
+    if who is None:
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    if not auth.drone_allowed(who, drone_id):
+        return JSONResponse({"error": "forbidden"}, status_code=403)
+    return who
+
+
+@app.get("/api/flights")
+async def api_flights(token: str | None = Query(default=None), drone: str | None = Query(default=None)):
+    who = _principal(token)
+    if who is None:
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    flights = [f for f in rec.list_flights(LOG_DIR, drone) if auth.drone_allowed(who, f.get("drone_id", ""))]
+    return {"flights": flights}
+
+
+@app.get("/api/flights/{drone_id}/{flight_id}")
+async def api_flight(drone_id: str, flight_id: str, token: str | None = Query(default=None)):
+    who = _flight_access(token, drone_id)
+    if isinstance(who, JSONResponse):
+        return who
+    d = rec.flight_dir(LOG_DIR, drone_id, flight_id)
+    if not d:
+        return JSONResponse({"error": "not found"}, status_code=404)
+    summary = json.loads((d / "summary.json").read_text()) if (d / "summary.json").exists() else {}
+    summary["files"] = sorted(f.name for f in d.iterdir() if f.is_file())
+    return summary
+
+
+@app.get("/api/flights/{drone_id}/{flight_id}/track")
+async def api_flight_track(drone_id: str, flight_id: str, token: str | None = Query(default=None)):
+    who = _flight_access(token, drone_id)
+    if isinstance(who, JSONResponse):
+        return who
+    d = rec.flight_dir(LOG_DIR, drone_id, flight_id)
+    if not d:
+        return JSONResponse({"error": "not found"}, status_code=404)
+    return {"points": await asyncio.to_thread(rec.track, d)}
+
+
+@app.get("/api/flights/{drone_id}/{flight_id}/{filename}")
+async def api_flight_file(drone_id: str, flight_id: str, filename: str, token: str | None = Query(default=None)):
+    who = _flight_access(token, drone_id)
+    if isinstance(who, JSONResponse):
+        return who
+    d = rec.flight_dir(LOG_DIR, drone_id, flight_id)
+    if not d or filename not in ("telemetry.jsonl", "events.jsonl", "video.mp4", "video.mjpeg", "summary.json"):
+        return JSONResponse({"error": "not found"}, status_code=404)
+    f = d / filename
+    if not f.exists():
+        return JSONResponse({"error": "not found"}, status_code=404)
+    media = {"video.mp4": "video/mp4", "video.mjpeg": "video/x-motion-jpeg", "summary.json": "application/json"}.get(filename, "application/x-ndjson")
+    return FileResponse(f, media_type=media, filename=f"{drone_id}-{flight_id}-{filename}" if filename != "video.mp4" else None)
+
+
+@app.delete("/api/flights/{drone_id}/{flight_id}")
+async def api_flight_delete(drone_id: str, flight_id: str, token: str | None = Query(default=None)):
+    who = _flight_access(token, drone_id)
+    if isinstance(who, JSONResponse):
+        return who
+    if who["role"] != "operator":
+        return JSONResponse({"error": "operators only"}, status_code=403)
+    d = rec.flight_dir(LOG_DIR, drone_id, flight_id)
+    if not d:
+        return JSONResponse({"error": "not found"}, status_code=404)
+    r = rooms.get(drone_id)
+    if r and r.rec.active and r.rec.flight_id == flight_id:
+        return JSONResponse({"error": "flight is still recording"}, status_code=409)
+    rec.delete_flight(d)
+    log.info("%s deleted flight %s/%s", who["user"], drone_id, flight_id)
+    return {"ok": True}
+
+
+@app.post("/api/record/{drone_id}")
+async def api_record(drone_id: str, req: Request, token: str | None = Query(default=None)):
+    """Manual recording start/stop (operators). Armed periods are recorded automatically anyway."""
+    who = _flight_access(token, drone_id)
+    if isinstance(who, JSONResponse):
+        return who
+    if who["role"] != "operator":
+        return JSONResponse({"error": "operators only"}, status_code=403)
+    body = await req.json()
+    r = room(drone_id)
+    if body.get("action") == "start":
+        if r.drone is None:
+            return JSONResponse({"error": "aircraft offline"}, status_code=409)
+        r.rec.start("manual", who["user"])
+    elif body.get("action") == "stop":
+        r.rec.stop()
+    else:
+        return JSONResponse({"error": "action must be start or stop"}, status_code=400)
+    await broadcast_recording(r)
+    return r.rec.status()
 
 
 @app.get("/api/me")

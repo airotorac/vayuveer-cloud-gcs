@@ -6,3 +6,5 @@ drone/config.local.yaml
 .DS_Store
 users.json
 dist/
+data/
+deploy/flights/

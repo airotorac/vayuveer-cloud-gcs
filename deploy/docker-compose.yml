@@ -8,8 +8,11 @@ services:
     environment:
       - VAYUVEER_TOKEN=${VAYUVEER_TOKEN}
       - VAYUVEER_USERS_FILE=/data/users.json
+      - VAYUVEER_LOG_DIR=/data/flights
+      - VAYUVEER_MAX_LOG_GB=${VAYUVEER_MAX_LOG_GB:-6}
     volumes:
       - ./users.json:/data/users.json
+      - ./flights:/data/flights          # flight logs + video recordings
     restart: unless-stopped
     expose: ["8000"]
 

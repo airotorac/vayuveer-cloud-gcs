@@ -28,6 +28,7 @@
     frames: 0, fps: 0, rttDrone: null, rttServer: null,
     waypoints: [], planMode: false, follow: true, trail: [], role: "operator",
     fence: [], fenceMode: false, fenceOnFc: null, fenceBreach: false,
+    recording: null, flights: [], flightSel: null,
     stick: { throttle: 0, yaw: 0, pitch: 0, roll: 0 }, stickActive: false, keys: new Set(),
   };
 
@@ -75,6 +76,7 @@
     switch (m.type) {
       case "telemetry": S.tele = m; S.lastTeleAt = performance.now(); if (!S.droneOnline) { S.droneOnline = true; setPill("pill-drone", "on", "Aircraft"); } renderTelemetry(m); break;
       case "session": applySession(m); break;
+      case "recording": onRecording(m); break;
       case "drone_online": S.droneOnline = true; setPill("pill-drone", "on", "Aircraft"); log("Drone online", "ok"); break;
       case "drone_offline": S.droneOnline = false; setPill("pill-drone", "off", "Aircraft"); setPill("pill-fc", "off", "FC"); $("vid-offline").classList.remove("hidden"); log("Drone offline", "err"); break;
       case "status": log(m.text, `s${m.severity}`); break;
@@ -189,6 +191,7 @@
   const wpLayer = L.layerGroup().addTo(map);
   const fencePoly = L.polygon([], { color: "#d13438", weight: 2, fillColor: "#d13438", fillOpacity: .06, dashArray: "8 6" }).addTo(map);
   const fenceLayer = L.layerGroup().addTo(map);
+  const reviewLine = L.polyline([], { color: "#7c3aed", weight: 3, opacity: .85 });
   function inPolygon(lat, lon, poly) {
     let inside = false;
     for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
@@ -321,6 +324,88 @@
     tick.onmessage = () => { if (S.stickActive) sendManual(); };
   } catch { setInterval(() => { if (S.stickActive) sendManual(); }, 100); }
   document.addEventListener("visibilitychange", () => { if (document.hidden && S.stickActive) { S.keys.clear(); Object.assign(S.stick, { pitch: 0, roll: 0, yaw: 0, throttle: 0 }); stickChanged(); log("Page hidden - joystick released", "s4"); } });
+
+  // ------------------------------------------------------------------ recording status + flights
+  function onRecording(m) {
+    const was = S.recording && S.recording.active;
+    S.recording = m;
+    $("vid-rec").classList.toggle("hidden", !m.active);
+    $("btn-rec").classList.toggle("recording", !!m.active);
+    $("btn-rec").textContent = m.active ? "Stop rec" : "Record";
+    if (m.active && !was) log(`Recording flight ${m.flight_id}${m.manual ? " (manual)" : ""}`, "ok");
+    if (!m.active && was) log("Recording stopped – flight saved", "ok");
+  }
+  setInterval(() => { const r = S.recording; if (r && r.active && r.since) { const s = Math.max(0, Math.round(Date.now() / 1000 - r.since)); $("vid-rec").textContent = `● REC ${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`; } }, 1000);
+  $("btn-rec").onclick = async () => {
+    if (S.role !== "operator") return log("View-only account", "err");
+    const action = S.recording && S.recording.active ? "stop" : "start";
+    try {
+      const r = await fetch(`${httpBase()}/api/record/${encodeURIComponent(cfg.drone)}?token=${encodeURIComponent(cfg.token)}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action }) });
+      if (!r.ok) log((await r.json()).error || "recording request failed", "err");
+    } catch { log("Cannot reach the relay", "err"); }
+  };
+
+  const fdlg = $("flights");
+  const fmtDur = s => s == null ? "—" : `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
+  const fmtDate = t => new Date(t * 1000).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+  const apiUrl = (path) => `${httpBase()}${path}${path.includes("?") ? "&" : "?"}token=${encodeURIComponent(cfg.token)}`;
+  async function loadFlights() {
+    const tb = $("flights-table").querySelector("tbody"); tb.innerHTML = "";
+    try {
+      const r = await fetch(apiUrl(`/api/flights`)); const j = await r.json(); S.flights = j.flights || [];
+    } catch { S.flights = []; }
+    $("flights-empty").classList.toggle("hidden", S.flights.length > 0);
+    $("flights-sub").textContent = `${S.flights.length} flight${S.flights.length === 1 ? "" : "s"} on record`;
+    S.flights.forEach(f => {
+      const tr = document.createElement("tr"); tr.dataset.id = `${f.drone_id}/${f.flight_id}`;
+      const live = f.status === "recording";
+      tr.innerHTML = `<td>${fmtDate(f.started)}</td><td>${f.drone_id}</td><td>${live ? '<span class="live">● live</span>' : fmtDur(f.duration_s)}</td><td>${(f.max_alt ?? 0).toFixed(0)} m</td><td>${((f.distance_m ?? 0) / 1000).toFixed(2)} km</td><td>${f.video === "ready" ? "✓" : f.video === "processing" ? "…" : f.video === "raw" ? "raw" : "—"}</td>`;
+      tr.onclick = () => showFlight(f);
+      if (S.flightSel === tr.dataset.id) tr.classList.add("active");
+      tb.appendChild(tr);
+    });
+  }
+  async function showFlight(f) {
+    S.flightSel = `${f.drone_id}/${f.flight_id}`;
+    $("flights-table").querySelectorAll("tr").forEach(tr => tr.classList.toggle("active", tr.dataset.id === S.flightSel));
+    const det = $("flight-detail"); det.classList.remove("hidden");
+    const base = `/api/flights/${encodeURIComponent(f.drone_id)}/${encodeURIComponent(f.flight_id)}`;
+    const v = $("flight-video");
+    if (f.video === "ready") { v.src = apiUrl(`${base}/video.mp4`); v.classList.remove("hidden"); $("flight-video-note").textContent = ""; }
+    else { v.removeAttribute("src"); v.classList.add("hidden"); $("flight-video-note").textContent = f.video === "processing" ? "Video is being processed – check back in a minute." : f.status === "recording" ? "Flight in progress – video will be available after landing." : f.video === "raw" ? "Video could not be converted; the raw stream can be downloaded." : "No video was recorded for this flight."; }
+    const rows = [["Started", fmtDate(f.started)], ["Duration", f.status === "recording" ? "in progress" : fmtDur(f.duration_s)], ["Max altitude", `${(f.max_alt ?? 0).toFixed(1)} m`],
+      ["Distance flown", `${((f.distance_m ?? 0) / 1000).toFixed(2)} km`], ["Farthest from home", `${(f.max_dist_home ?? 0).toFixed(0)} m`], ["Max speed", `${(f.max_groundspeed ?? 0).toFixed(1)} m/s`],
+      ["Battery", f.batt_start != null ? `${Math.round(f.batt_start)}% → ${Math.round(f.batt_end)}%` : "—"], ["Min satellites", f.min_sats ?? "—"], ["Modes", (f.modes || []).join(", ") || "—"],
+      ["Fence breaches", f.breaches ?? 0], ["Commands", `${f.commands ?? 0} by ${(f.users || []).join(", ") || "—"}`], ["Frames", f.frames ?? 0], ["Size", f.size_mb != null ? `${f.size_mb} MB` : "—"], ["Started by", f.manual ? f.started_by || "operator" : "auto (armed)"]];
+    $("flight-stats").innerHTML = rows.map(([k, val]) => `<div><i>${k}</i><span>${val}</span></div>`).join("");
+    $("flight-dl-tele").href = apiUrl(`${base}/telemetry.jsonl`);
+    $("flight-dl-events").href = apiUrl(`${base}/events.jsonl`);
+    const vl = $("flight-dl-video"); vl.href = apiUrl(`${base}/${f.video === "raw" ? "video.mjpeg" : "video.mp4"}`); vl.classList.toggle("disabled", !(f.video === "ready" || f.video === "raw"));
+    $("flight-delete").classList.toggle("hidden", S.role !== "operator" || f.status === "recording");
+    $("flight-track").onclick = async () => {
+      try {
+        const r = await fetch(apiUrl(`${base}/track`)); const j = await r.json();
+        const pts = (j.points || []).map(p => [p[1], p[2]]);
+        if (!pts.length) return log("No position data in this flight", "err");
+        reviewLine.setLatLngs(pts).addTo(map); fdlg.close(); S.follow = false; $("btn-follow").classList.remove("active"); map.fitBounds(reviewLine.getBounds(), { padding: [30, 30] });
+        $("map-hint").textContent = `Showing track of flight ${f.flight_id} (purple). Press Follow to hide it.`; log(`Track of ${f.flight_id} shown on map`, "ok");
+      } catch { log("Could not load track", "err"); }
+    };
+    $("flight-delete").onclick = async () => {
+      if (!confirm(`Delete flight ${f.flight_id} and its video permanently?`)) return;
+      const r = await fetch(apiUrl(base), { method: "DELETE" });
+      if (r.ok) { det.classList.add("hidden"); S.flightSel = null; loadFlights(); log(`Deleted flight ${f.flight_id}`, "ok"); } else log((await r.json()).error || "delete failed", "err");
+    };
+    const ev = $("flight-events"); ev.innerHTML = '<div class="muted">loading…</div>';
+    try {
+      const txt = await (await fetch(apiUrl(`${base}/events.jsonl`))).text();
+      const lines = txt.trim().split("\n").filter(Boolean).slice(-300).map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+      ev.innerHTML = lines.map(e => `<div><time>${new Date((e.t || 0) * 1000).toLocaleTimeString([], { hour12: false })}</time>${e.user ? `<span class="u">${e.user}</span>` : ""}<span>${e.type === "command" ? `${e.name} ${e.args ? JSON.stringify(e.args) : ""}` : e.type === "ack" ? `${e.cmd}: ${e.msg}` : e.text || ""}</span></div>`).join("") || '<div class="muted">no events</div>';
+    } catch { ev.innerHTML = '<div class="muted">could not load events</div>'; }
+  }
+  $("btn-flights").onclick = () => { if (!cfg.token) return openSettings(); loadFlights(); fdlg.showModal(); };
+  $("flights-close").onclick = () => fdlg.close();
+  $("btn-follow").addEventListener("click", () => { if (S.follow && map.hasLayer(reviewLine)) { map.removeLayer(reviewLine); setHint(); } });
 
   // ------------------------------------------------------------------ session / login
   const dlg = $("settings"), loginErr = $("login-error");

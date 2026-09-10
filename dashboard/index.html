@@ -39,6 +39,7 @@
   </div>
   <div class="user">
     <span id="user-name" class="muted"></span>
+    <button class="sm" id="btn-flights" title="Flight logs and recordings">Flights</button>
     <button class="icon-btn" id="btn-settings" title="Account & connection">⋯</button>
   </div>
 </header>
@@ -50,10 +51,12 @@
     <div class="video-overlay-top">
       <span id="vid-source">EO</span>
       <span id="vid-offline">No video</span>
+      <span id="vid-rec" class="rec hidden">● REC 00:00</span>
     </div>
     <div class="video-tools">
       <button data-cam="EO" class="active">EO</button>
       <button data-cam="IR">IR</button>
+      <button id="btn-rec" title="Start / stop a manual recording (flights are recorded automatically while armed)">Record</button>
       <button id="btn-fullscreen" title="Fullscreen">⤢</button>
     </div>
     <div class="sticks">
@@ -164,6 +167,36 @@
       <button value="ok" class="sm primary" id="cfg-save">Sign in</button>
     </div>
   </form>
+</dialog>
+
+<dialog id="flights" class="wide">
+  <div class="dialog-head">
+    <div class="dialog-brand"><img src="/icons/icon.svg" alt=""><div><b>Flights</b><span class="muted" id="flights-sub">Logs and recordings</span></div></div>
+    <button class="sm" id="flights-close" type="button">Close</button>
+  </div>
+  <div class="flights-body">
+    <div class="flights-list">
+      <table id="flights-table">
+        <thead><tr><th>Date</th><th>Aircraft</th><th>Duration</th><th>Max alt</th><th>Distance</th><th>Video</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <p class="muted" id="flights-empty">No flights recorded yet. Every armed period is recorded automatically.</p>
+    </div>
+    <div class="flight-detail hidden" id="flight-detail">
+      <video id="flight-video" controls playsinline preload="metadata"></video>
+      <p class="muted" id="flight-video-note"></p>
+      <div class="telemetry-grid" id="flight-stats"></div>
+      <div class="row">
+        <button class="sm primary" id="flight-track">Show track on map</button>
+        <a class="sm btn" id="flight-dl-tele" download>Telemetry</a>
+        <a class="sm btn" id="flight-dl-events" download>Events</a>
+        <a class="sm btn" id="flight-dl-video" download>Video</a>
+        <button class="sm danger" id="flight-delete">Delete</button>
+      </div>
+      <h3>Events</h3>
+      <div id="flight-events" class="flight-events"></div>
+    </div>
+  </div>
 </dialog>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>

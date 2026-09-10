@@ -94,6 +94,27 @@ python3 server/manage_users.py remove <username>
 The Compose stack also runs an always-on simulated aircraft, `demo-01`, so demo accounts can fly
 without hardware. Sessions last 12 hours. The master token still works via **Advanced** in the sign-in dialog.
 
+## Flight logs and video recording
+
+The relay records every flight automatically: recording starts when the aircraft arms and stops
+when it disarms (operators can also press **Record** in the video panel for a manual recording).
+Each flight is stored under `deploy/flights/<aircraft>/<timestamp>/` on the relay host:
+
+| File | Content |
+|---|---|
+| `telemetry.jsonl` | every telemetry message (5 Hz) |
+| `events.jsonl` | FC status text, command acknowledgements, and every dashboard command with the user who sent it |
+| `video.mp4` | the video stream, converted to H.264 by ffmpeg when the flight ends |
+| `summary.json` | duration, max altitude, distance flown, farthest point from home, battery used, modes, fence breaches, users |
+
+The **Flights** button in the dashboard header lists recorded flights, plays the video, shows the
+stats and event timeline, draws the flown track on the map, and offers downloads. Oldest flights
+are deleted automatically once the log directory exceeds `VAYUVEER_MAX_LOG_GB` (default 6 GB).
+
+REST: `GET /api/flights`, `GET /api/flights/{aircraft}/{id}` (summary), `.../track`,
+`.../telemetry.jsonl`, `.../events.jsonl`, `.../video.mp4`, `DELETE /api/flights/{aircraft}/{id}`,
+`POST /api/record/{aircraft}` `{"action":"start"|"stop"}`.
+
 ## Safety features built in
 
 * **Arm confirmation** – ARM must be pressed twice within 4 s; the agent also rejects arm
@@ -139,4 +160,3 @@ mode names, and `MAV_CMD_NAV_TAKEOFF` needs lat/lon filled. Those are the only p
 * Replace MJPEG-over-WebSocket with WebRTC (e.g. `aiortc` on the Pi + a TURN server) for
   lower latency and H.264 hardware encoding on the Pi 5.
 * Per-user accounts / roles instead of a single shared token (FastAPI + JWT).
-* Record telemetry + video server-side for post-flight review (fits the AiServe pipeline).
