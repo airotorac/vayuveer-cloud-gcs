@@ -1,6 +1,6 @@
-# VayuVeer GCS
+# VayuVeer Cloud GCS
 
-VayuVeer GCS is the ground control station for the AiRotor AX4 (or any ArduPilot/PX4 aircraft) that works
+VayuVeer Cloud GCS is the ground control station for the AiRotor AX4 (or any ArduPilot/PX4 aircraft) that works
 over the **internet** instead of a line-of-sight radio: a Raspberry Pi 5 on the aircraft
 dials out to a small relay server over 4G/5G or Wi-Fi, and an installable web app gives
 the operator live video, a moving map, telemetry, flight buttons, virtual joysticks and

@@ -1,4 +1,4 @@
-/* VayuVeer GCS dashboard.  Vanilla JS; talks to the relay over one WebSocket.
+/* VayuVeer Cloud GCS dashboard.  Vanilla JS; talks to the relay over one WebSocket.
    Text frames = JSON (telemetry, status, ack); binary frames = JPEG video. */
 (() => {
   "use strict";

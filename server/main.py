@@ -1,5 +1,5 @@
 """
-VayuVeer GCS - relay server.
+VayuVeer Cloud GCS - relay server.
 
 Sits on the public internet. Drones (RPi 5 agents) connect OUT to it over a
 WebSocket, dashboards connect to it too, and the server relays:
@@ -34,7 +34,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 TOKEN = os.environ.get("AX4_TOKEN", "change-me")
 DASHBOARD_DIR = Path(__file__).resolve().parent.parent / "dashboard"
 
-app = FastAPI(title="VayuVeer GCS relay")
+app = FastAPI(title="VayuVeer Cloud GCS relay")
 
 
 class DroneRoom:
